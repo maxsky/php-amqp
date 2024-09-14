@@ -58,7 +58,8 @@ class AMQPBaseConnection {
                 'port' => $config->port,
                 'vhost' => $config->vhost,
                 'login' => $config->user,
-                'password' => $config->password
+                'password' => $config->password,
+                'connection_name' => $config->connection_name
             ], $config->connect_options)))->connect();
         } catch (\AMQPConnectionException $e) {
             throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
@@ -79,6 +80,8 @@ class AMQPBaseConnection {
         $connectionConfig->setVhost($config->vhost);
         $connectionConfig->setUser($config->user);
         $connectionConfig->setPassword($config->password);
+        $connectionConfig->setLocale($config->locale);
+        $connectionConfig->setConnectionName($config->connection_name);
 
         foreach ($config->connect_options as $key => $value) {
             $method = 'set' . ucfirst($key);

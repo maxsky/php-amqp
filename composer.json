@@ -22,7 +22,8 @@
     "require": {
         "php": "^7.1|^8.0",
         "ext-amqp": "*",
-        "nesbot/carbon": "^2.72|^3.8",
+        "ext-json": "*",
+        "nesbot/carbon": "^2.72",
         "php-amqplib/php-amqplib": "^3.5"
     },
     "require-dev": {

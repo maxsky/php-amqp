@@ -18,6 +18,7 @@ class AMQPConfig {
     public $user = 'guest';
     public $password = 'guest';
     public $vhost = '/';
+    public $locale = 'zh_CN';
 
     public $connect_options = [];
 }

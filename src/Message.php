@@ -9,17 +9,23 @@
 
 namespace MaxSky\AMQP;
 
+use AMQPConnection;
+use AMQPException;
 use MaxSky\AMQP\Config\AMQPBaseConnection;
 use MaxSky\AMQP\Config\AMQPConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
 use MaxSky\AMQP\Queue\SendMessage;
+use MaxSky\AMQP\Queue\SendMessageByExtension;
+use PhpAmqpLib\Connection\AbstractConnection;
 
 class Message {
 
     private static $instance;
 
     private $config;
+
+    /** @var AMQPConnection|AbstractConnection */
     private $connection;
 
     /**
@@ -48,16 +54,27 @@ class Message {
     }
 
     /**
-     * @return bool
+     * @param string      $handler
+     * @param mixed       $data
+     * @param string|null $queue_name
+     * @param null        $delay
+     * @param bool        $transaction
+     *
+     * @return void
      * @throws AMQPQueueException
      */
-    public function send() {
-        $class = new SendMessage();
-
+    public function send(string  $handler, $data,
+                         ?string $queue_name = 'default', $delay = null, bool $transaction = false) {
         if (extension_loaded('amqp')) {
-
+            $sendService = new SendMessageByExtension($this->connection, $this->config->connection_name);
+        } else {
+            $sendService = new SendMessage($this->connection, $this->config->connection_name);
         }
 
-        return $class->send($this->connection);
+        try {
+            $sendService->send($handler, $data, $queue_name, $delay, $transaction);
+        } catch (AMQPException $e) {
+            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+        }
     }
 }
