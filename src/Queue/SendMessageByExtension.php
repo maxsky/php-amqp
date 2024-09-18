@@ -38,12 +38,46 @@ class SendMessageByExtension extends AbstractSendMessage {
                          ?string $queue_name = 'default', $delay = null, bool $transaction = false) {
         $this->paramsFilter($handler, $data, $delay);
 
+
+
+        $message = $this->getAMQPMessage($handler, $data);
+        $headers = $this->getAMQPMessageHeader($delay);
+
+        if ($transaction) {
+            try {
+                $channel->startTransaction();
+
+                $exchange->publish($message, null, null, $headers);
+
+                $channel->commitTransaction();
+            } catch (AMQPException $e) {
+                $channel->rollbackTransaction();
+
+                $this->connection->disconnect();
+
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            }
+        } else {
+            try {
+                $exchange->publish($message, null, null, $headers);
+            } catch (AMQPException $e) {
+                $this->connection->disconnect();
+
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            }
+        }
+
+        $channel->close();
+        $this->connection->disconnect();
+    }
+
+    protected function declare() {
         try {
             // Create and declare channel
-            $channel = new AMQPChannel($this->connection);
+            $this->channel = new AMQPChannel($this->connection);
 
             // AMQPC Exchange is the publishing mechanism
-            $exchange = new AMQPExchange($channel);
+            $exchange = new AMQPExchange($this->channel);
             $exchange->setFlags(AMQP_DURABLE);
 
             $exchangeName = $this->connectionName;
@@ -58,11 +92,7 @@ class SendMessageByExtension extends AbstractSendMessage {
             }
 
             $exchange->setName($exchangeName);
-
-            $retryExchange = new AMQPExchange($channel);
-            $retryExchange->setName($exchangeName . '.retry');
-            $retryExchange->setType(AMQPExchangeType::TOPIC);
-            $retryExchange->setFlags(AMQP_DURABLE);
+            $exchange->declare();
 
             $queue = new AMQPQueue($channel);
 
@@ -70,49 +100,14 @@ class SendMessageByExtension extends AbstractSendMessage {
 
             $queue->setName($queueName);
             $queue->setFlags(AMQP_DURABLE);
-            $queue->bind($exchangeName, $queueName);
+            $queue->declare();
+
+            $queue->bind($exchangeName);
         } catch (AMQPException $e) {
             $this->connection->disconnect();
 
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
         }
-
-        if ($transaction) {
-            try {
-                $channel->startTransaction();
-
-                $exchange->publish(
-                    $this->getAMQPMessage($handler, $data),
-                    $queueName,
-                    null,
-                    $this->getAMQPMessageHeader($delay)
-                );
-
-                $channel->commitTransaction();
-            } catch (AMQPException $e) {
-                $channel->rollbackTransaction();
-
-                $this->connection->disconnect();
-
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
-            }
-        } else {
-            try {
-                $exchange->publish(
-                    $this->getAMQPMessage($handler, $data),
-                    $queueName,
-                    null,
-                    $this->getAMQPMessageHeader($delay)
-                );
-            } catch (AMQPException $e) {
-                $this->connection->disconnect();
-
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
-            }
-        }
-
-        $channel->close();
-        $this->connection->disconnect();
     }
 
     /**
@@ -122,13 +117,10 @@ class SendMessageByExtension extends AbstractSendMessage {
      * @return false|string
      */
     private function getAMQPMessage(string $handler, $data) {
-        $payload = [
+        return json_encode([
             'handler' => $handler,
-            'data' => $data,
-            'create_time' => Carbon::now()->toDateTimeString()
-        ];
-
-        return json_encode($payload, JSON_UNESCAPED_UNICODE);
+            'data' => $data
+        ], JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -139,10 +131,12 @@ class SendMessageByExtension extends AbstractSendMessage {
      */
     private function getAMQPMessageHeader(?int $delay = 0, array $extra_headers = []): array {
         return [
-            'delivery_mode' => AMQP_DELIVERY_MODE_PERSISTENT, // write to disk, default keep data in RAM
+            'delivery_mode' => AMQP_DELIVERY_MODE_PERSISTENT, // write to disk
+            'content_type' => 'application/json',
+            'timestamp' => Carbon::now()->timestamp,
             'headers' => array_merge([
                 'x-delay' => $delay * 1000,
-                'x-attempts' => 1,
+                'x-attempts' => 0,
                 'x-exception' => null
             ], $extra_headers)
         ];

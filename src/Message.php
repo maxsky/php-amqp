@@ -10,11 +10,11 @@
 namespace MaxSky\AMQP;
 
 use AMQPConnection;
-use AMQPException;
+use DateTimeInterface;
 use MaxSky\AMQP\Config\AMQPBaseConnection;
 use MaxSky\AMQP\Config\AMQPConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
-use MaxSky\AMQP\Exception\AMQPQueueException;
+use MaxSky\AMQP\Queue\AbstractSendMessage;
 use MaxSky\AMQP\Queue\SendMessage;
 use MaxSky\AMQP\Queue\SendMessageByExtension;
 use PhpAmqpLib\Connection\AbstractConnection;
@@ -28,6 +28,9 @@ class Message {
     /** @var AMQPConnection|AbstractConnection */
     private $connection;
 
+    /** @var AbstractSendMessage */
+    private $messageService;
+
     /**
      * @param AMQPConfig $config
      *
@@ -37,6 +40,8 @@ class Message {
         $this->config = $config;
 
         $this->connection = (new AMQPBaseConnection($config))->getConnection();
+
+        $this->declare();
     }
 
     /**
@@ -45,7 +50,7 @@ class Message {
      * @return Message
      * @throws AMQPConnectionException
      */
-    public static function connect(AMQPConfig $config): Message {
+    public static function init(AMQPConfig $config): Message {
         if (!self::$instance) {
             self::$instance = new self($config);
         }
@@ -54,27 +59,28 @@ class Message {
     }
 
     /**
-     * @param string      $handler
-     * @param mixed       $data
-     * @param string|null $queue_name
-     * @param null        $delay
-     * @param bool        $transaction
+     * @param string                     $handler
+     * @param mixed                      $data
+     * @param string|null                $queue_name
+     * @param int|DateTimeInterface|null $delay
+     * @param bool                       $transaction
      *
      * @return void
-     * @throws AMQPQueueException
      */
     public function send(string  $handler, $data,
                          ?string $queue_name = 'default', $delay = null, bool $transaction = false) {
-        if (extension_loaded('amqp')) {
-            $sendService = new SendMessageByExtension($this->connection, $this->config->connection_name);
-        } else {
-            $sendService = new SendMessage($this->connection, $this->config->connection_name);
-        }
+        $this->messageService->send($handler, $data, $queue_name, $delay, $transaction);
+    }
 
-        try {
-            $sendService->send($handler, $data, $queue_name, $delay, $transaction);
-        } catch (AMQPException $e) {
-            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+    /**
+     * @return void
+     * @throws AMQPConnectionException
+     */
+    private function declare() {
+        if (extension_loaded('amqp')) {
+            $this->messageService = new SendMessageByExtension($this->connection, $this->config->connection_name);
+        } else {
+            $this->messageService = new SendMessage($this->connection, $this->config->connection_name);
         }
     }
 }

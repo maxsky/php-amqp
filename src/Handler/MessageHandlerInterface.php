@@ -14,13 +14,13 @@ use MaxSky\AMQP\Exception\AMQPMessageHandlerException;
 interface MessageHandlerInterface {
 
     /**
-     * @param mixed     $data
-     * @param bool|null $result
+     * @param mixed $data
+     * @param mixed $result
      *
      * @return void
      * @throws AMQPMessageHandlerException
      */
-    public function handle($data, ?bool &$result = null): void;
+    public function handle($data, &$result = null): void;
 
     /**
      * @param array $data

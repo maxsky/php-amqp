@@ -14,7 +14,6 @@ use DateTimeInterface;
 use Exception;
 use MaxSky\AMQP\Config\AMQPExchangeType;
 use MaxSky\AMQP\Exception\AMQPQueueException;
-use PhpAmqpLib\Connection\AbstractConnection;
 use PhpAmqpLib\Exception\AMQPRuntimeException;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Wire\AMQPTable;
@@ -37,7 +36,6 @@ class SendMessage extends AbstractSendMessage {
                          ?string $queue_name = 'default', $delay = null, bool $transaction = false) {
         $this->paramsFilter($handler, $data, $delay);
 
-        /** @var AbstractConnection $connection */
         $channel = $this->connection->channel();
 
         $exchangeName = $this->connectionName;
@@ -58,27 +56,21 @@ class SendMessage extends AbstractSendMessage {
             );
         }
 
-        // declare retry exchange, the another one exchange for failed can declare if you need
-        $channel->exchange_declare("$exchangeName.retry", AMQPExchangeType::TOPIC,
-            false, true, false);
-
         $queueName = $queue_name ?: 'default';
 
         // declare queue, always a normal queue at this
-        $channel->queue_declare($queueName, false, true, false, false, false,
-            new AMQPTable([
-                'x-queue-mode' => 'lazy'
-            ])
-        );
+        $channel->queue_declare($queueName, false, true, false, false);
 
         // bind queue to exchange and use queue name as routing key
-        // $channel->queue_bind($queueName, $exchangeName, $queueName);
+        $channel->queue_bind($queueName, $exchangeName);
+
+        $message = $this->getAMQPMessage($handler, $data, $delay);
 
         if ($transaction) {
             $channel->tx_select();
 
             try {
-                $channel->basic_publish($this->getAMQPMessage($handler, $data, $delay), $exchangeName, $queueName);
+                $channel->basic_publish($message, $exchangeName);
 
                 $channel->tx_commit();
             } catch (AMQPRuntimeException $e) {
@@ -88,7 +80,7 @@ class SendMessage extends AbstractSendMessage {
             }
         } else {
             try {
-                $channel->basic_publish($this->getAMQPMessage($handler, $data, $delay), $exchangeName, $queueName);
+                $channel->basic_publish($message, $exchangeName);
             } catch (AMQPRuntimeException $e) {
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
             }
@@ -111,19 +103,18 @@ class SendMessage extends AbstractSendMessage {
      * @return AMQPMessage
      */
     private function getAMQPMessage(string $handler, $data, ?int $delay = 0): AMQPMessage {
-        $payload = [
+        return new AMQPMessage(json_encode([
             'handler' => $handler,
-            'data' => $data,
-            'create_time' => Carbon::now()->toDateTimeString()
-        ];
-
-        return new AMQPMessage(json_encode($payload, JSON_UNESCAPED_UNICODE), [
+            'data' => $data
+        ], JSON_UNESCAPED_UNICODE), [
             'application_headers' => new AMQPTable([
                 'x-delay' => $delay * 1000,
-                'x-attempts' => 1,
+                'x-attempts' => 0,
                 'x-exception' => null
             ]),
             'delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT, // write to disk
+            'content_type' => 'application/json',
+            'timestamp' => Carbon::now()->timestamp,
             // message alive time, the message will discard when time up, must be a string
             //'expiration' => (string)(($expiration ?: 60) * 1000),
         ]);

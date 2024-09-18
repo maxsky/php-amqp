@@ -12,6 +12,8 @@ namespace MaxSky\AMQP\Queue;
 use AMQPConnection;
 use Carbon\Carbon;
 use DateTimeInterface;
+use Exception;
+use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
 use MaxSky\AMQP\Handler\MessageHandlerInterface;
 use PhpAmqpLib\Connection\AbstractConnection;
@@ -24,9 +26,26 @@ abstract class AbstractSendMessage {
     /** @var string */
     protected $connectionName;
 
+    protected $channel;
+    protected $exchange;
+
+    /**
+     * @param AbstractConnection|AMQPConnection $connection
+     * @param string                            $connection_name
+     *
+     * @throws AMQPConnectionException
+     */
     public function __construct($connection, string $connection_name) {
         $this->connection = $connection;
         $this->connectionName = $connection_name;
+
+        try {
+            if ($this->connection instanceof AMQPConnection) {
+                $connection->connect();
+            }
+        } catch (Exception $e) {
+            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
+        }
     }
 
     /**
@@ -42,6 +61,11 @@ abstract class AbstractSendMessage {
                                   ?string $queue_name = 'default', $delay = null, bool $transaction = false);
 
     /**
+     * @return mixed
+     */
+    abstract protected function declare();
+
+    /**
      * 参数过滤
      *
      * @param string                     $handler 队列处理器
@@ -52,7 +76,7 @@ abstract class AbstractSendMessage {
      * @throws AMQPQueueException
      */
     protected function paramsFilter(string $handler, $data, &$delay = 0): void {
-        if (!class_exists($handler) || !is_a($handler, MessageHandlerInterface::class)) {
+        if (!class_exists($handler) || !is_a($handler, MessageHandlerInterface::class, true)) {
             throw new AMQPQueueException('Handler not exist or not implement from base Handler interface.');
         }
 

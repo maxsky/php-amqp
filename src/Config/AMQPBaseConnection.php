@@ -39,7 +39,7 @@ class AMQPBaseConnection {
      */
     public function getConnection() {
         if (!$this->connection) {
-            throw new AMQPConnectionException('Connection not created');
+            throw new AMQPConnectionException('Connection not created or failed.');
         }
 
         return $this->connection;
@@ -49,21 +49,16 @@ class AMQPBaseConnection {
      * @param AMQPConfig $config
      *
      * @return void
-     * @throws AMQPConnectionException
      */
     private function createConnectionByExt(AMQPConfig $config) {
-        try {
-            $this->connection = (new AMQPConnection(array_merge([
-                'host' => $config->host,
-                'port' => $config->port,
-                'vhost' => $config->vhost,
-                'login' => $config->user,
-                'password' => $config->password,
-                'connection_name' => $config->connection_name
-            ], $config->connect_options)))->connect();
-        } catch (\AMQPConnectionException $e) {
-            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
-        }
+        $this->connection = (new AMQPConnection(array_merge([
+            'host' => $config->host,
+            'port' => $config->port,
+            'vhost' => $config->vhost,
+            'login' => $config->user,
+            'password' => $config->password,
+            'connection_name' => $config->connection_name
+        ], $config->connect_options)));
     }
 
     /**
@@ -94,9 +89,5 @@ class AMQPBaseConnection {
         }
 
         $this->connection = AMQPConnectionFactory::create($connectionConfig);
-
-        if (!$this->connection->isConnected()) {
-            throw new AMQPConnectionException('Cannot connect to the broker.');
-        }
     }
 }
