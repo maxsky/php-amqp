@@ -10,14 +10,13 @@
 namespace MaxSky\AMQP\Queue;
 
 use AMQPChannel;
-use AMQPChannelException;
-use AMQPConnectionException;
 use AMQPException;
 use AMQPExchange;
 use AMQPQueue;
 use Carbon\Carbon;
 use DateTimeInterface;
 use MaxSky\AMQP\Config\AMQPExchangeType;
+use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
 
 class SendMessageByExtension extends AbstractSendMessage {
@@ -31,25 +30,50 @@ class SendMessageByExtension extends AbstractSendMessage {
      *
      * @return void
      * @throws AMQPQueueException
-     * @throws AMQPChannelException
-     * @throws AMQPConnectionException
+     * @throws \AMQPConnectionException
      */
     public function send(string  $handler, $data,
                          ?string $queue_name = 'default', $delay = null, bool $transaction = false) {
-        $this->paramsFilter($handler, $data, $delay);
+        $this->paramsFilter($handler, $data, $queue_name, $delay);
 
+        $exchangeName = $this->config->connection_name;
 
+        if ($delay) {
+            $exchangeName .= '.delay';
+
+            $this->exchange->setType(AMQPExchangeType::DELAYED);
+            $this->exchange->setArgument('x-delayed-type', AMQPExchangeType::TOPIC);
+        } else {
+            $this->exchange->setType(AMQPExchangeType::TOPIC);
+        }
+
+        $this->exchange->setName($exchangeName);
+
+        try {
+            $this->exchange->declare();
+
+            $this->retryQueue->setName("$queue_name.retry");
+            $this->retryQueue->declare();
+
+            $this->queue->setName($queue_name);
+            $this->queue->setArgument('x-dead-letter-exchange', "$exchangeName.retry");
+            $this->queue->declare();
+
+            $this->queue->bind($exchangeName);
+        } catch (AMQPException $e) {
+            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+        }
 
         $message = $this->getAMQPMessage($handler, $data);
         $headers = $this->getAMQPMessageHeader($delay);
 
         if ($transaction) {
             try {
-                $channel->startTransaction();
+                $this->channel->startTransaction();
 
-                $exchange->publish($message, null, null, $headers);
+                $this->exchange->publish($message, null, null, $headers);
 
-                $channel->commitTransaction();
+                $this->channel->commitTransaction();
             } catch (AMQPException $e) {
                 $channel->rollbackTransaction();
 
@@ -59,7 +83,7 @@ class SendMessageByExtension extends AbstractSendMessage {
             }
         } else {
             try {
-                $exchange->publish($message, null, null, $headers);
+                $this->exchange->publish($message, null, null, $headers);
             } catch (AMQPException $e) {
                 $this->connection->disconnect();
 
@@ -67,44 +91,38 @@ class SendMessageByExtension extends AbstractSendMessage {
             }
         }
 
-        $channel->close();
+        $this->channel->close();
         $this->connection->disconnect();
     }
 
-    protected function declare() {
+    /**
+     * @return void
+     * @throws AMQPConnectionException
+     * @throws AMQPQueueException
+     */
+    protected function prepare() {
         try {
             // Create and declare channel
             $this->channel = new AMQPChannel($this->connection);
 
             // AMQPC Exchange is the publishing mechanism
-            $exchange = new AMQPExchange($this->channel);
-            $exchange->setFlags(AMQP_DURABLE);
+            $this->exchange = new AMQPExchange($this->channel);
+            $this->exchange->setFlags(AMQP_DURABLE);
 
-            $exchangeName = $this->connectionName;
+            $this->retryQueue = new AMQPQueue($this->channel);
+            $this->retryQueue->setFlags(AMQP_DURABLE);
 
-            if ($delay) {
-                $exchangeName .= '.delay';
-
-                $exchange->setType(AMQPExchangeType::DELAYED);
-                $exchange->setArgument('x-delayed-type', AMQPExchangeType::TOPIC);
-            } else {
-                $exchange->setType(AMQPExchangeType::TOPIC);
-            }
-
-            $exchange->setName($exchangeName);
-            $exchange->declare();
-
-            $queue = new AMQPQueue($channel);
-
-            $queueName = $queue_name ?: 'default';
-
-            $queue->setName($queueName);
-            $queue->setFlags(AMQP_DURABLE);
-            $queue->declare();
-
-            $queue->bind($exchangeName);
+            $this->queue = new AMQPQueue($this->channel);
+            $this->queue->setArguments([
+                // 'x-dead-letter-routing-key' => 'dead_letter_routing_key',
+                'x-message-ttl' => $this->config->queue_ttl
+            ]);
         } catch (AMQPException $e) {
-            $this->connection->disconnect();
+            try {
+                $this->connection->disconnect();
+            } catch (\AMQPConnectionException $e) {
+                throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            }
 
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
         }

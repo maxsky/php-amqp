@@ -47,6 +47,6 @@ class TestSendMessage extends TestCase {
             'name' => 'phpunit-test',
             'message' => 'hello world',
             'create_time' => Carbon::now()->timestamp
-        ], 'phpunit');
+        ], 'phpunit-queue');
     }
 }

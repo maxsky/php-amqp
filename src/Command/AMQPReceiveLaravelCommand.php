@@ -66,6 +66,8 @@ class AMQPReceiveLaravelCommand extends Command {
         $this->config->password = config('amqp.connection.password');
         $this->config->vhost = config('amqp.connection.vhost');
 
+        $this->config->queue_ttl = config('amqp.arguments.queue_ttl');
+
         $this->config->connect_options = config('amqp.connection.options');
 
         $this->initCommandOptions();

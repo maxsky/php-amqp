@@ -34,7 +34,7 @@ class SendMessage extends AbstractSendMessage {
      */
     public function send(string  $handler, $data,
                          ?string $queue_name = 'default', $delay = null, bool $transaction = false) {
-        $this->paramsFilter($handler, $data, $delay);
+        $this->paramsFilter($handler, $data, $queue_name, $delay);
 
         $channel = $this->connection->channel();
 
@@ -93,6 +93,10 @@ class SendMessage extends AbstractSendMessage {
         } catch (Exception $e) {
             throw new $e;
         }
+    }
+
+    protected function prepare() {
+
     }
 
     /**
