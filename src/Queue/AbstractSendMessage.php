@@ -9,7 +9,6 @@
 
 namespace MaxSky\AMQP\Queue;
 
-use AMQPChannel;
 use AMQPConnection;
 use AMQPExchange;
 use AMQPQueue;
@@ -20,6 +19,7 @@ use MaxSky\AMQP\Config\AMQPConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
 use MaxSky\AMQP\Handler\MessageHandlerInterface;
+use PhpAmqpLib\Channel\AMQPChannel;
 use PhpAmqpLib\Connection\AbstractConnection;
 
 abstract class AbstractSendMessage {
@@ -30,14 +30,19 @@ abstract class AbstractSendMessage {
     /** @var AMQPConfig */
     protected $config;
 
-    /** @var AMQPChannel */
+    /** @var \AMQPChannel|AMQPChannel */
     protected $channel;
     /** @var AMQPExchange */
     protected $exchange;
+
+    protected $exchange_name;
+
     /** @var AMQPQueue */
     protected $queue;
     /** @var AMQPQueue */
     protected $retryQueue;
+
+    protected $delay_msec;
 
     /**
      * @param AbstractConnection|AMQPConnection $connection
@@ -62,16 +67,15 @@ abstract class AbstractSendMessage {
     }
 
     /**
-     * @param string                     $handler
-     * @param mixed                      $data
-     * @param string|null                $queue_name
-     * @param int|DateTimeInterface|null $delay
-     * @param bool                       $transaction
+     * @param string      $handler
+     * @param mixed       $data
+     * @param string|null $queue_name
+     * @param bool        $transaction
      *
-     * @return mixed
+     * @return void
      */
     abstract public function send(string  $handler, $data,
-                                  ?string $queue_name = 'default', $delay = null, bool $transaction = false);
+                                  ?string $queue_name = 'default', bool $transaction = false);
 
     /**
      * @return void
@@ -81,17 +85,37 @@ abstract class AbstractSendMessage {
     abstract protected function prepare();
 
     /**
+     * @param int|string|DateTimeInterface $msec
+     *
+     * @return AbstractSendMessage
+     */
+    public function delay($msec): AbstractSendMessage {
+        if ($msec instanceof DateTimeInterface) {
+            $msec = Carbon::now()->diffInMicroseconds($msec, false);
+        }
+
+        $msec = (int)$msec;
+
+        if ($msec < 0) {
+            $msec = 0;
+        }
+
+        $this->delay_msec = $msec;
+
+        return $this;
+    }
+
+    /**
      * 参数过滤
      *
-     * @param string                     $handler    队列处理器
-     * @param mixed                      $data       队列数据
-     * @param string|null                $queue_name 队列名称
-     * @param int|DateTimeInterface|null $delay
+     * @param string      $handler    队列处理器
+     * @param mixed       $data       队列数据
+     * @param string|null $queue_name 队列名称
      *
      * @return void
      * @throws AMQPQueueException
      */
-    protected function paramsFilter(string $handler, $data, ?string $queue_name, &$delay = 0): void {
+    protected function paramsFilter(string $handler, $data, ?string $queue_name): void {
         if (!class_exists($handler) || !is_a($handler, MessageHandlerInterface::class, true)) {
             throw new AMQPQueueException('Handler not exist or not implement from base Handler interface.');
         }
@@ -102,16 +126,6 @@ abstract class AbstractSendMessage {
 
         if (!$queue_name) {
             throw new AMQPQueueException('Queue name could not be empty.');
-        }
-
-        if ($delay instanceof DateTimeInterface) {
-            $delay = Carbon::now()->diffInSeconds($delay, false);
-        }
-
-        $delay = (int)$delay;
-
-        if ($delay < 0) {
-            $delay = 0;
         }
     }
 }

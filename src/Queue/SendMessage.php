@@ -10,9 +10,9 @@
 namespace MaxSky\AMQP\Queue;
 
 use Carbon\Carbon;
-use DateTimeInterface;
 use Exception;
 use MaxSky\AMQP\Config\AMQPExchangeType;
+use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
 use PhpAmqpLib\Exception\AMQPRuntimeException;
 use PhpAmqpLib\Message\AMQPMessage;
@@ -23,96 +23,99 @@ class SendMessage extends AbstractSendMessage {
     /**
      * 发送消息队列
      *
-     * @param string                     $handler     队列处理器
-     * @param mixed                      $data        队列数据
-     * @param string|null                $queue_name  队列名
-     * @param int|DateTimeInterface|null $delay       延迟秒
-     * @param bool                       $transaction 是否开启事务
+     * @param string      $handler     队列处理器
+     * @param mixed       $data        队列数据
+     * @param string|null $queue_name  队列名
+     * @param bool        $transaction 是否开启事务
      *
      * @return void
+     * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
     public function send(string  $handler, $data,
-                         ?string $queue_name = 'default', $delay = null, bool $transaction = false) {
-        $this->paramsFilter($handler, $data, $queue_name, $delay);
+                         ?string $queue_name = 'default', bool $transaction = false) {
+        $this->paramsFilter($handler, $data, $queue_name);
 
-        $channel = $this->connection->channel();
+        $this->channel->queue_declare(
+            "$queue_name.retry", false, true, false, false
+        );
 
-        $exchangeName = $this->connectionName;
+        $this->channel->queue_declare(
+            $queue_name, false, true, false, false, false, new AMQPTable([
+                'x-dead-letter-exchange' => "$this->exchange_name.retry"
+                // 'x-dead-letter-routing-key' => 'dead_letter_routing_key',
+                // 'x-message-ttl' => $this->config->queue_ttl
+            ])
+        );
 
-        if ($delay) {
-            $exchangeName .= '.delay';
+        $this->channel->queue_bind($queue_name, $this->exchange_name);
+
+        $message = $this->getAMQPMessage($handler, $data, $this->delay_msec);
+
+        if ($transaction) {
+            $this->channel->tx_select();
+
+            try {
+                $this->channel->basic_publish($message, $this->exchange_name);
+
+                $this->channel->tx_commit();
+            } catch (AMQPRuntimeException $e) {
+                $this->channel->tx_rollback();
+
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            }
+        } else {
+            try {
+                $this->channel->basic_publish($message, $this->exchange_name);
+            } catch (AMQPRuntimeException $e) {
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            }
+        }
+
+        try {
+            $this->channel->close();
+            $this->connection->close();
+        } catch (Exception $e) {
+            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
+        }
+    }
+
+    protected function prepare() {
+        $this->channel = $this->connection->channel();
+
+        $this->exchange_name = $this->config->connection_name;
+
+        if ($this->delay_msec) {
+            $this->exchange_name .= '.delay';
 
             // declare normal delay exchange
-            $channel->exchange_declare($exchangeName, AMQPExchangeType::DELAYED,
+            $this->channel->exchange_declare($this->exchange_name, AMQPExchangeType::DELAYED,
                 false, true, false, false, false, new AMQPTable([
                     'x-delayed-type' => AMQPExchangeType::TOPIC
                 ])
             );
         } else {
             // declare normal exchange
-            $channel->exchange_declare(
-                $exchangeName, AMQPExchangeType::TOPIC, false, true, false
+            $this->channel->exchange_declare(
+                $this->exchange_name, AMQPExchangeType::TOPIC, false, true, false
             );
         }
-
-        $queueName = $queue_name ?: 'default';
-
-        // declare queue, always a normal queue at this
-        $channel->queue_declare($queueName, false, true, false, false);
-
-        // bind queue to exchange and use queue name as routing key
-        $channel->queue_bind($queueName, $exchangeName);
-
-        $message = $this->getAMQPMessage($handler, $data, $delay);
-
-        if ($transaction) {
-            $channel->tx_select();
-
-            try {
-                $channel->basic_publish($message, $exchangeName);
-
-                $channel->tx_commit();
-            } catch (AMQPRuntimeException $e) {
-                $channel->tx_rollback();
-
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
-            }
-        } else {
-            try {
-                $channel->basic_publish($message, $exchangeName);
-            } catch (AMQPRuntimeException $e) {
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
-            }
-        }
-
-        $channel->close();
-
-        try {
-            $this->connection->close();
-        } catch (Exception $e) {
-            throw new $e;
-        }
-    }
-
-    protected function prepare() {
-
     }
 
     /**
-     * @param string   $handler 队列处理器
-     * @param mixed    $data    队列数据
-     * @param int|null $delay   延迟时间
+     * @param string $handler 队列处理器
+     * @param mixed  $data    队列数据
+     * @param int    $delay   延迟时间，毫秒
      *
      * @return AMQPMessage
      */
-    private function getAMQPMessage(string $handler, $data, ?int $delay = 0): AMQPMessage {
+    private function getAMQPMessage(string $handler, $data, int $delay = 0): AMQPMessage {
         return new AMQPMessage(json_encode([
             'handler' => $handler,
             'data' => $data
         ], JSON_UNESCAPED_UNICODE), [
             'application_headers' => new AMQPTable([
-                'x-delay' => $delay * 1000,
+                'x-delay' => $delay,
                 'x-attempts' => 0,
                 'x-exception' => null
             ]),

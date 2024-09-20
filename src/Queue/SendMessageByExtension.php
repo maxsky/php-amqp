@@ -14,58 +14,39 @@ use AMQPException;
 use AMQPExchange;
 use AMQPQueue;
 use Carbon\Carbon;
-use DateTimeInterface;
 use MaxSky\AMQP\Config\AMQPExchangeType;
-use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
 
 class SendMessageByExtension extends AbstractSendMessage {
 
     /**
-     * @param string                     $handler
-     * @param mixed                      $data
-     * @param string|null                $queue_name
-     * @param int|DateTimeInterface|null $delay
-     * @param bool                       $transaction
+     * @param string      $handler
+     * @param mixed       $data
+     * @param string|null $queue_name
+     * @param bool        $transaction
      *
      * @return void
      * @throws AMQPQueueException
      * @throws \AMQPConnectionException
      */
     public function send(string  $handler, $data,
-                         ?string $queue_name = 'default', $delay = null, bool $transaction = false) {
-        $this->paramsFilter($handler, $data, $queue_name, $delay);
-
-        $exchangeName = $this->config->connection_name;
-
-        if ($delay) {
-            $exchangeName .= '.delay';
-
-            $this->exchange->setType(AMQPExchangeType::DELAYED);
-            $this->exchange->setArgument('x-delayed-type', AMQPExchangeType::TOPIC);
-        } else {
-            $this->exchange->setType(AMQPExchangeType::TOPIC);
-        }
-
-        $this->exchange->setName($exchangeName);
+                         ?string $queue_name = 'default', bool $transaction = false) {
+        $this->paramsFilter($handler, $data, $queue_name);
 
         try {
-            $this->exchange->declare();
-
             $this->retryQueue->setName("$queue_name.retry");
             $this->retryQueue->declare();
 
             $this->queue->setName($queue_name);
-            $this->queue->setArgument('x-dead-letter-exchange', "$exchangeName.retry");
             $this->queue->declare();
 
-            $this->queue->bind($exchangeName);
+            $this->queue->bind($this->exchange_name);
         } catch (AMQPException $e) {
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
         }
 
         $message = $this->getAMQPMessage($handler, $data);
-        $headers = $this->getAMQPMessageHeader($delay);
+        $headers = $this->getAMQPMessageHeader($this->delay_msec);
 
         if ($transaction) {
             try {
@@ -97,8 +78,8 @@ class SendMessageByExtension extends AbstractSendMessage {
 
     /**
      * @return void
-     * @throws AMQPConnectionException
      * @throws AMQPQueueException
+     * @throws \AMQPConnectionException
      */
     protected function prepare() {
         try {
@@ -109,20 +90,32 @@ class SendMessageByExtension extends AbstractSendMessage {
             $this->exchange = new AMQPExchange($this->channel);
             $this->exchange->setFlags(AMQP_DURABLE);
 
+            $this->exchange_name = $this->config->connection_name;
+
+            if ($this->delay_msec) {
+                $this->exchange_name .= '.delay';
+
+                $this->exchange->setType(AMQPExchangeType::DELAYED);
+                $this->exchange->setArgument('x-delayed-type', AMQPExchangeType::TOPIC);
+            } else {
+                $this->exchange->setType(AMQPExchangeType::TOPIC);
+            }
+
+            $this->exchange->setName($this->exchange_name);
+            $this->exchange->declare();
+
             $this->retryQueue = new AMQPQueue($this->channel);
             $this->retryQueue->setFlags(AMQP_DURABLE);
 
             $this->queue = new AMQPQueue($this->channel);
+            $this->queue->setFlags(AMQP_DURABLE);
             $this->queue->setArguments([
+                'x-dead-letter-exchange' => "$this->exchange_name.retry"
                 // 'x-dead-letter-routing-key' => 'dead_letter_routing_key',
-                'x-message-ttl' => $this->config->queue_ttl
+                // 'x-message-ttl' => $this->config->queue_ttl
             ]);
         } catch (AMQPException $e) {
-            try {
-                $this->connection->disconnect();
-            } catch (\AMQPConnectionException $e) {
-                throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
-            }
+            $this->connection->disconnect();
 
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
         }
@@ -153,7 +146,7 @@ class SendMessageByExtension extends AbstractSendMessage {
             'content_type' => 'application/json',
             'timestamp' => Carbon::now()->timestamp,
             'headers' => array_merge([
-                'x-delay' => $delay * 1000,
+                'x-delay' => $delay,
                 'x-attempts' => 0,
                 'x-exception' => null
             ], $extra_headers)

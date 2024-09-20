@@ -10,7 +10,6 @@
 namespace MaxSky\AMQP;
 
 use AMQPConnection;
-use DateTimeInterface;
 use MaxSky\AMQP\Config\AMQPBaseConnection;
 use MaxSky\AMQP\Config\AMQPConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
@@ -62,17 +61,15 @@ class Message {
     }
 
     /**
-     * @param string                     $handler
-     * @param mixed                      $data
-     * @param string|null                $queue_name
-     * @param int|DateTimeInterface|null $delay
-     * @param bool                       $transaction
+     * @param string      $handler
+     * @param mixed       $data
+     * @param string|null $queue_name
+     * @param bool        $transaction
      *
      * @return void
      */
-    public function send(string  $handler, $data,
-                         ?string $queue_name = 'default', $delay = null, bool $transaction = false) {
-        $this->messageService->send($handler, $data, $queue_name, $delay, $transaction);
+    public function send(string $handler, $data, ?string $queue_name = 'default', bool $transaction = false) {
+        $this->messageService->send($handler, $data, $queue_name, $transaction);
     }
 
     /**

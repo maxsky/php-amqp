@@ -52,6 +52,10 @@ class TestConnectServer extends TestCase {
     }
 
     public function testConnectThoughLibrary() {
+        if (extension_loaded('amqp')) {
+            $this->fail('AMQP Extension loaded. Please disable.');
+        }
+
         try {
             $baseConnection = new AMQPBaseConnection($this->config);
 
