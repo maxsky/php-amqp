@@ -13,7 +13,7 @@ class AMQPConfig {
 
     public $connection_name = 'default';
 
-    public $queue_ttl = 60000;
+    public $queue_ttl = 0; // msec, 1000 = 1s
     // public $message_ttl = 0;
 
     public $host = '127.0.0.1';

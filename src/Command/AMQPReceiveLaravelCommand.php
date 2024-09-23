@@ -27,8 +27,6 @@ if (!class_exists(Command::class)) {
 
 class AMQPReceiveLaravelCommand extends Command {
 
-    use AMQPReceiveByExtensionTrait;
-
     protected $name = 'amqp';
     protected $signature = 'amqp:receive
                             {receive          : Use this argument to receive messages}
@@ -49,7 +47,6 @@ class AMQPReceiveLaravelCommand extends Command {
     private $type;
     private $ttl;
     private $tries;
-    private $serializer = 'json';
 
     /**
      * @throws AMQPConnectionException
@@ -73,6 +70,10 @@ class AMQPReceiveLaravelCommand extends Command {
         $this->initCommandOptions();
 
         $this->connection = (new AMQPBaseConnection($this->config))->getConnection();
+
+        if () {
+
+        }
     }
 
     /**
@@ -165,17 +166,6 @@ class AMQPReceiveLaravelCommand extends Command {
 
         $this->delay = (bool)$this->option('delay');
 
-        if ($this->delay) {
-            define('EXCHANGE_NORMAL', $this->config->connection_name . '.delay');
-            define('EXCHANGE_RETRY', $this->config->connection_name . '.delay.retry');
-
-        } else {
-            define('EXCHANGE_NORMAL', $this->config->connection_name);
-            define('EXCHANGE_RETRY', $this->config->connection_name . '.retry');
-        }
-
-        define('EXCHANGE_CURRENT', $this->type === 'normal' ? constant('EXCHANGE_NORMAL') : constant('EXCHANGE_RETRY'));
-
         $queues = array_filter(explode(',', $this->option('queues')));
 
         if (!$queues) {
@@ -243,7 +233,6 @@ class AMQPReceiveLaravelCommand extends Command {
     private function queueDeclare(AMQPChannel $channel): void {
         // default use lazy mode
         $args = [
-            'x-queue-mode' => 'lazy'
         ];
 
         if ($this->type === 'retry') {

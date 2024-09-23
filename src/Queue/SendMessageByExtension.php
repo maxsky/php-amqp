@@ -109,11 +109,16 @@ class SendMessageByExtension extends AbstractSendMessage {
 
             $this->queue = new AMQPQueue($this->channel);
             $this->queue->setFlags(AMQP_DURABLE);
-            $this->queue->setArguments([
+
+            $args = [
                 'x-dead-letter-exchange' => "$this->exchange_name.retry"
-                // 'x-dead-letter-routing-key' => 'dead_letter_routing_key',
-                // 'x-message-ttl' => $this->config->queue_ttl
-            ]);
+            ];
+
+            if ($this->config->queue_ttl) {
+                $args['x-message-ttl'] = $this->config->queue_ttl;
+            }
+
+            $this->queue->setArguments($args);
         } catch (AMQPException $e) {
             $this->connection->disconnect();
 
@@ -135,12 +140,12 @@ class SendMessageByExtension extends AbstractSendMessage {
     }
 
     /**
-     * @param int|null $delay
-     * @param array    $extra_headers
+     * @param int   $delay
+     * @param array $extra_headers
      *
      * @return array
      */
-    private function getAMQPMessageHeader(?int $delay = 0, array $extra_headers = []): array {
+    private function getAMQPMessageHeader(int $delay = 0, array $extra_headers = []): array {
         return [
             'delivery_mode' => AMQP_DELIVERY_MODE_PERSISTENT, // write to disk
             'content_type' => 'application/json',

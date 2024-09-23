@@ -40,12 +40,16 @@ class SendMessage extends AbstractSendMessage {
             "$queue_name.retry", false, true, false, false
         );
 
+        $args = [
+            'x-dead-letter-exchange' => "$this->exchange_name.retry"
+        ];
+
+        if ($this->config->queue_ttl) {
+            $args['x-message-ttl'] = $this->config->queue_ttl;
+        }
+
         $this->channel->queue_declare(
-            $queue_name, false, true, false, false, false, new AMQPTable([
-                'x-dead-letter-exchange' => "$this->exchange_name.retry"
-                // 'x-dead-letter-routing-key' => 'dead_letter_routing_key',
-                // 'x-message-ttl' => $this->config->queue_ttl
-            ])
+            $queue_name, false, true, false, false, false, new AMQPTable($args)
         );
 
         $this->channel->queue_bind($queue_name, $this->exchange_name);

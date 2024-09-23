@@ -42,7 +42,7 @@ abstract class AbstractSendMessage {
     /** @var AMQPQueue */
     protected $retryQueue;
 
-    protected $delay_msec;
+    protected $delay_msec = 0;
 
     /**
      * @param AbstractConnection|AMQPConnection $connection
