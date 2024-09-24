@@ -12,45 +12,56 @@ namespace MaxSky\AMQP\Queue;
 use AMQPConnection;
 use AMQPExchange;
 use Exception;
+use MaxSky\AMQP\Config\AMQPBaseConnection;
 use MaxSky\AMQP\Config\AMQPConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
+use MaxSky\AMQP\Exception\AMQPMessageHandlerException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
+use MaxSky\AMQP\Handler\MessageHandlerInterface;
 use PhpAmqpLib\Channel\AMQPChannel;
 use PhpAmqpLib\Connection\AbstractConnection;
 
 abstract class AbstractReceiveMessage {
 
-    /** @var AbstractConnection|AMQPConnection */
+    /** @var AMQPConnection|AbstractConnection */
     protected $connection;
 
     /** @var AMQPConfig */
     protected $config;
 
-    protected $options;
+    /** @var array */
+    protected $options = [];
 
     /** @var \AMQPChannel|AMQPChannel */
     protected $channel;
+
     /** @var AMQPExchange */
     protected $exchange;
 
+    /** @var string */
     protected $exchange_name;
 
+    /** @var array */
+    protected $queues = [];
+
     /**
-     * @param AbstractConnection|AMQPConnection $connection
-     * @param AMQPConfig                        $config
-     * @param array                             $options
+     * @param AMQPConfig $config
+     * @param array      $options
      *
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
-    public function __construct($connection, AMQPConfig $config, array $options) {
-        $this->connection = $connection;
+    public function __construct(AMQPConfig $config, array $options) {
         $this->config = $config;
         $this->options = $options;
 
+        $this->connection = (new AMQPBaseConnection($this->config))->getConnection();
+
         try {
             if ($this->connection instanceof AMQPConnection) {
-                $connection->connect();
+                $this->connection->connect();
+            } else {
+                $this->channel = $this->connection->channel();
             }
         } catch (Exception $e) {
             throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
@@ -60,15 +71,9 @@ abstract class AbstractReceiveMessage {
     }
 
     /**
-     * @param string      $handler
-     * @param mixed       $data
-     * @param string|null $queue_name
-     * @param bool        $transaction
-     *
      * @return void
      */
-    abstract public function receive(string  $handler, $data,
-                                     ?string $queue_name = 'default', bool $transaction = false);
+    abstract public function receive();
 
     /**
      * @return void
@@ -76,4 +81,44 @@ abstract class AbstractReceiveMessage {
      * @throws AMQPQueueException
      */
     abstract protected function prepare();
+
+    /**
+     * 队列处理
+     *
+     * @param string $handler_class 处理类
+     * @param mixed  $data          队列数据
+     * @param mixed  $result        返回结果
+     *
+     * @return void
+     * @throws AMQPMessageHandlerException
+     */
+    protected function queueHandle(string $handler_class, $data, &$result = null): void {
+        /** @var MessageHandlerInterface $handler */
+        $handler = new $handler_class();
+
+        $handler->handle($data, $result);
+    }
+
+    /**
+     * 失败处理
+     *
+     * @param string $handler_class
+     * @param string $queue_name
+     * @param mixed  $data
+     * @param array  $headers
+     *
+     * @return void
+     */
+    protected function failedHandle(string $handler_class,
+                                    string $queue_name, $data, array $headers = []): void {
+        /** @var MessageHandlerInterface $handler */
+        $handler = new $handler_class();
+
+        $handler->failed([
+            'connection' => 'amqp',
+            'queue' => $queue_name,
+            'data' => json_encode($data),
+            'headers' => $headers
+        ]);
+    }
 }

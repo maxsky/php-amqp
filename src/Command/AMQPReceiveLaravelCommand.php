@@ -9,27 +9,21 @@
 
 namespace MaxSky\AMQP\Command;
 
-use AMQPConnection;
+use Carbon\Carbon;
 use Exception;
 use Illuminate\Console\Command;
-use MaxSky\AMQP\Config\AMQPBaseConnection;
 use MaxSky\AMQP\Config\AMQPConfig;
-use MaxSky\AMQP\Config\AMQPExchangeType;
-use MaxSky\AMQP\Exception\AMQPConnectionException;
-use PhpAmqpLib\Channel\AMQPChannel;
-use PhpAmqpLib\Connection\AbstractConnection;
-use PhpAmqpLib\Message\AMQPMessage;
-use PhpAmqpLib\Wire\AMQPTable;
+use MaxSky\AMQP\Queue\ReceiveMessage;
+use MaxSky\AMQP\Queue\ReceiveMessageByExtension;
 
 if (!class_exists(Command::class)) {
-    throw new Exception('Laravel Command class not found');
+    throw new Exception('Laravel/Lumen Command class not found');
 }
 
 class AMQPReceiveLaravelCommand extends Command {
 
     protected $name = 'amqp';
     protected $signature = 'amqp:receive
-                            {receive          : Use this argument to receive messages}
                             {--d|delay        : Use this option to receive delayed messages, default receive instant messages}
                             {--queues=default : Set the queue name, multiple queues are separated by ","}
                             {--type=normal    : Set queue type, optional retry}
@@ -37,23 +31,19 @@ class AMQPReceiveLaravelCommand extends Command {
                             {--tries=3        : Set a number of attempt for a queue}';
     protected $description = 'Receive and handle AMQP messages';
 
-    private $config;
-    /** @var AMQPConnection|AbstractConnection */
-    private $connection;
+    private $options = [];
 
-    private $delay;
-    /** @var string[] */
-    private $queues;
-    private $type;
-    private $ttl;
-    private $tries;
+    private $config;
+
+    private $messageService;
 
     /**
-     * @throws AMQPConnectionException
+     * 消息处理
+     *
+     * @return void
+     * @throws Exception
      */
-    public function __construct() {
-        parent::__construct();
-
+    public function handle(): void {
         $this->config = new AMQPConfig();
 
         $this->config->connection_name = config('amqp.connection.name');
@@ -69,87 +59,19 @@ class AMQPReceiveLaravelCommand extends Command {
 
         $this->initCommandOptions();
 
-        $this->connection = (new AMQPBaseConnection($this->config))->getConnection();
-
-        if () {
-
-        }
-    }
-
-    /**
-     * 消息处理
-     *
-     * @return void
-     * @throws Exception
-     */
-    public function handle(): void {
-        $channel = $connection->channel();
-
-        $this->declareHandler($channel);
-
-        $this->info("[{$this->getDateTimeString()}] Waiting for $this->type messages. To exit press control+C");
-
-        // $channel->basic_qos(0, 1, null);
-
-        /** @var SerializerFactoryInterface $factory */
-        $factory = SerializerFactory::{$this->serializer}();
-
-        foreach ($this->queues as $queue) {
-            $channel->basic_consume("$queue.$this->type", '', false, true,
-                false, false, function (AMQPMessage $msg) use ($queue, $factory) {
-                    // get headers data
-                    /** @var AMQPTable $table */
-                    $table = $msg->get('application_headers');
-
-                    $headers = $table->getNativeData();
-
-                    // get body data
-                    /** @var array $body */
-                    $body = $factory->unserialize($msg->getBody());
-
-                    if ($headers['x-exception'] || $headers['x-attempts'] > $this->tries) {
-                        $this->queueFailedHandle($body['handler'], $queue, $body['data'], $headers['x-exception']);
-                    } else {
-                        try {
-                            $this->queueHandle($body['handler'], $body['data'], $result);
-
-                            if ($result === false) {
-                                $this->queueFailedHandle(
-                                    $body['handler'], $queue, $body['data'], $headers['x-exception']
-                                );
-                            }
-
-                            $this->info("[{$this->getDateTimeString()}] Queue \"{$body['handler']}\" handled.");
-                        } catch (Exception $e) {
-                            Log::channel('job')
-                                ->error('RabbitMQ Handle error: ' . $e->getMessage(), $e->getTrace());
-
-                            $this->warn("[{$this->getDateTimeString()}] Queue \"{$body['handler']}\" retried.");
-
-                            $table->set('x-attempts', ++$headers['x-attempts']);
-
-                            // cannot use array as value in header
-                            $table->set('x-exception', json_encode([
-                                'message' => $e->getMessage(),
-                                'code' => $e->getCode(),
-                                'trace' => $e->getTrace()
-                            ]));
-
-                            $msg->set('application_headers', $table);
-
-                            $msg->getChannel()->basic_publish($msg, EXCHANGE_RETRY, "$queue.retry");
-                        }
-                    }
-                }
-            );
+        if (extension_loaded('amqp')) {
+            $this->messageService = new ReceiveMessageByExtension($this->config, $this->options);
+        } else {
+            $this->messageService = new ReceiveMessage($this->config, $this->options);
         }
 
-        while (count($channel->callbacks)) {
-            $channel->wait();
-        }
+        $this->info("[{$this->getDateTimeString()}] Waiting for {$this->options['type']} messages. To exit press control+C.");
 
-        $channel->close();
-        $connection->close();
+        try {
+            $this->messageService->receive();
+        } catch (Exception $e) {
+            $this->error($e->getMessage());
+        }
     }
 
     /**
@@ -158,13 +80,17 @@ class AMQPReceiveLaravelCommand extends Command {
      * @return void
      */
     private function initCommandOptions(): void {
-        $this->type = strtolower($this->option('type'));
+        $this->options['type'] = strtolower($this->option('type'));
 
-        if (!in_array($this->type, ['normal', 'retry'])) {
+        if (!in_array($this->options['type'], ['normal', 'retry'])) {
             exit('Queue type invalid.');
         }
 
-        $this->delay = (bool)$this->option('delay');
+        $this->options['delay'] = (bool)$this->option('delay');
+
+        if ($this->options['delay'] && ($this->options['type'] === 'retry')) {
+            exit('Queue retry type and delay can not be used together.');
+        }
 
         $queues = array_filter(explode(',', $this->option('queues')));
 
@@ -172,7 +98,7 @@ class AMQPReceiveLaravelCommand extends Command {
             $queues = ['default'];
         }
 
-        $this->queues = $queues;
+        $this->options['queues'] = $queues;
 
         $ttl = (int)$this->option('ttl');
 
@@ -180,7 +106,7 @@ class AMQPReceiveLaravelCommand extends Command {
             $ttl = 60;
         }
 
-        $this->ttl = $ttl;
+        $this->options['ttl'] = $ttl;
 
         $tries = (int)$this->option('tries');
 
@@ -188,68 +114,7 @@ class AMQPReceiveLaravelCommand extends Command {
             $tries = 0;
         }
 
-        $this->tries = $tries;
-    }
-
-    /**
-     * @param AMQPChannel $channel
-     *
-     * @return void
-     */
-    private function declareHandler(AMQPChannel $channel): void {
-        if ($this->delay && $this->type === 'normal') {
-            // declare normal delay exchange
-            $channel->exchange_declare(
-                EXCHANGE_CURRENT,
-                AMQPExchangeType::DELAYED,
-                false,
-                true,
-                false,
-                false,
-                false,
-                new AMQPTable([
-                    'x-delayed-type' => AMQPExchangeType::TOPIC
-                ])
-            );
-        } else {
-            // declare normal exchange
-            $channel->exchange_declare(
-                EXCHANGE_CURRENT,
-                AMQPExchangeType::TOPIC,
-                false,
-                true,
-                false
-            );
-        }
-
-        $this->queueDeclare($channel);
-    }
-
-    /**
-     * @param AMQPChannel $channel
-     *
-     * @return void
-     */
-    private function queueDeclare(AMQPChannel $channel): void {
-        // default use lazy mode
-        $args = [
-        ];
-
-        if ($this->type === 'retry') {
-            $args = array_merge($args, [
-                'x-dead-letter-exchange' => EXCHANGE_NORMAL,
-                'x-message-ttl' => $this->ttl * 1000
-            ]);
-        }
-
-        foreach ($this->queues as $queue) {
-            $queue = "$queue.$this->type";
-
-            $channel->queue_declare($queue,
-                false, true, false, false, false, new AMQPTable($args));
-
-            $channel->queue_bind($queue, EXCHANGE_CURRENT, $queue);
-        }
+        $this->options['tries'] = $tries;
     }
 
     /**
@@ -257,48 +122,5 @@ class AMQPReceiveLaravelCommand extends Command {
      */
     private function getDateTimeString(): string {
         return Carbon::now()->toDateTimeString();
-    }
-
-    /**
-     * 失败处理
-     *
-     * @param string      $class
-     * @param string      $queue
-     * @param mixed       $data
-     * @param string|null $exception
-     *
-     * @return void
-     */
-    private function queueFailedHandle(string $class, string $queue, $data, ?string $exception = null): void {
-        /** @var Handler $handler */
-        $handler = app($class);
-
-        $handler->failed([
-            'connection' => 'amqp',
-            'queue' => $queue,
-            'payload' => json_encode($data),
-            'exception' => $exception
-        ]);
-
-        $this->info("[{$this->getDateTimeString()}] Queue \"$class\" failed handle complete.");
-    }
-
-    /**
-     * 队列处理
-     *
-     * @param string $class  目标类
-     * @param mixed  $data   队列数据
-     * @param mixed  $result 返回结果
-     *
-     * @return void
-     * @throws RabbitMQHandlerException
-     */
-    private function queueHandle(string $class, $data, &$result = null): void {
-        /** @var Handler $handler */
-        $handler = app($class);
-
-        $this->info("[{$this->getDateTimeString()}] Queue \"$class\" Handing.");
-
-        $handler->handle($data, $result);
     }
 }

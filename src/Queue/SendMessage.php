@@ -9,7 +9,6 @@
 
 namespace MaxSky\AMQP\Queue;
 
-use Carbon\Carbon;
 use Exception;
 use MaxSky\AMQP\Config\AMQPExchangeType;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
@@ -52,6 +51,7 @@ class SendMessage extends AbstractSendMessage {
             $queue_name, false, true, false, false, false, new AMQPTable($args)
         );
 
+        $this->channel->queue_bind("$queue_name.retry", "$this->exchange_name.retry");
         $this->channel->queue_bind($queue_name, $this->exchange_name);
 
         $message = $this->getAMQPMessage($handler, $data, $this->delay_msec);
@@ -104,6 +104,10 @@ class SendMessage extends AbstractSendMessage {
                 $this->exchange_name, AMQPExchangeType::TOPIC, false, true, false
             );
         }
+
+        $this->channel->exchange_declare(
+            "$this->exchange_name.retry", AMQPExchangeType::TOPIC, false, true, false
+        );
     }
 
     /**
@@ -121,13 +125,11 @@ class SendMessage extends AbstractSendMessage {
             'application_headers' => new AMQPTable([
                 'x-delay' => $delay,
                 'x-attempts' => 0,
-                'x-exception' => null
+                'x-exception' => ''
             ]),
             'delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT, // write to disk
             'content_type' => 'application/json',
-            'timestamp' => Carbon::now()->timestamp,
-            // message alive time, the message will discard when time up, must be a string
-            //'expiration' => (string)(($expiration ?: 60) * 1000),
+            'timestamp' => time()
         ]);
     }
 }

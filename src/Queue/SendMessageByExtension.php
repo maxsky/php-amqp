@@ -13,7 +13,6 @@ use AMQPChannel;
 use AMQPException;
 use AMQPExchange;
 use AMQPQueue;
-use Carbon\Carbon;
 use MaxSky\AMQP\Config\AMQPExchangeType;
 use MaxSky\AMQP\Exception\AMQPQueueException;
 
@@ -36,10 +35,10 @@ class SendMessageByExtension extends AbstractSendMessage {
         try {
             $this->retryQueue->setName("$queue_name.retry");
             $this->retryQueue->declare();
+            $this->retryQueue->bind("$this->exchange_name.retry");
 
             $this->queue->setName($queue_name);
             $this->queue->declare();
-
             $this->queue->bind($this->exchange_name);
         } catch (AMQPException $e) {
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
@@ -104,6 +103,11 @@ class SendMessageByExtension extends AbstractSendMessage {
             $this->exchange->setName($this->exchange_name);
             $this->exchange->declare();
 
+            $retryExchange = new AMQPExchange($this->channel);
+            $retryExchange->setName("$this->exchange_name.retry");
+            $retryExchange->setType(AMQPExchangeType::TOPIC);
+            $retryExchange->declare();
+
             $this->retryQueue = new AMQPQueue($this->channel);
             $this->retryQueue->setFlags(AMQP_DURABLE);
 
@@ -149,11 +153,11 @@ class SendMessageByExtension extends AbstractSendMessage {
         return [
             'delivery_mode' => AMQP_DELIVERY_MODE_PERSISTENT, // write to disk
             'content_type' => 'application/json',
-            'timestamp' => Carbon::now()->timestamp,
+            'timestamp' => time(),
             'headers' => array_merge([
                 'x-delay' => $delay,
                 'x-attempts' => 0,
-                'x-exception' => null
+                'x-exception' => ''
             ], $extra_headers)
         ];
     }

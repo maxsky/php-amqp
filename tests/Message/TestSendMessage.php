@@ -9,7 +9,6 @@
 
 namespace Tests\Message;
 
-use Carbon\Carbon;
 use MaxSky\AMQP\Config\AMQPConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
@@ -46,7 +45,7 @@ class TestSendMessage extends TestCase {
         Message::init($this->config)->send(ExampleMessageHandler::class, [
             'name' => 'phpunit-test',
             'message' => 'hello world',
-            'create_time' => Carbon::now()->timestamp
+            'create_time' => time()
         ], 'phpunit-queue');
     }
 }
