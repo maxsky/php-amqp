@@ -27,60 +27,58 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
      * @throws \MaxSky\AMQP\Exception\AMQPConnectionException
      */
     public function receive() {
-        /** @var AMQPQueue $queue */
-        foreach ($this->queues as $queue) {
-            try {
-                $queue->consume(function (AMQPEnvelope $msg, AMQPQueue $queue) {
-                    $headers = $msg->getHeaders();
 
-                    $body = json_decode($msg->getBody(), true);
+        while ($this->channel->isConnected()) {
+            /** @var AMQPQueue $queue */
+            foreach ($this->queues as $queue) {
+                try {
+                    $queue->consume(function (AMQPEnvelope $msg, AMQPQueue $queue) {
+                        $headers = $msg->getHeaders();
 
-                    if ($headers['x-exception'] || $headers['x-attempts'] > $this->options['tries']) {
-                        $body['timestamp'] = $msg->getTimestamp();
+                        $body = json_decode($msg->getBody(), true);
 
-                        $this->failedHandle($body['handler'], $queue->getName(), $body, $headers);
-                    } else {
-                        try {
-                            $this->queueHandle($body['handler'], $body['data'], $result);
+                        if ($headers['x-exception'] || $headers['x-attempts'] > $this->options['tries']) {
+                            $body['timestamp'] = $msg->getTimestamp();
 
-                            if ($result === false) {
-                                $this->failedHandle($body['handler'], $queue->getName(), $body['data'], $headers);
+                            $this->failedHandle($body['handler'], $queue->getName(), $body, $headers);
+                        } else {
+                            try {
+                                $this->queueHandle($body['handler'], $body['data'], $result);
+
+                                if ($result === false) {
+                                    $this->failedHandle($body['handler'], $queue->getName(), $body['data'], $headers);
+                                }
+                            } catch (Exception $e) {
+                                $args = $queue->getArguments();
+
+                                $args['headers']['x-attempts']++;
+
+                                $args['headers']['x-exception'] = json_encode([
+                                    'message' => $e->getMessage(),
+                                    'code' => $e->getCode(),
+                                    'trace' => $e->getTrace()
+                                ], JSON_UNESCAPED_UNICODE);
+
+                                $queue->setArguments($args);
+
+                                $queue->nack($msg->getDeliveryTag());
                             }
-                        } catch (Exception $e) {
-                            $args = $queue->getArguments();
-
-                            $args['headers']['x-attempts'] += 1;
-
-                            $args['headers']['x-exception'] = json_encode([
-                                'message' => $e->getMessage(),
-                                'code' => $e->getCode(),
-                                'trace' => $e->getTrace()
-                            ], JSON_UNESCAPED_UNICODE);
-
-                            $queue->setArguments($args);
-
-                            $queue->nack($msg->getDeliveryTag());
                         }
-                    }
 
-                    $queue->ack($msg->getDeliveryTag());
-                });
-            } catch (AMQPException $e) {
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+                        $queue->ack($msg->getDeliveryTag());
+                    });
+                } catch (AMQPException $e) {
+                    throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+                }
             }
-        }
 
-        while (count($this->channel->getConsumers())) {
-            try {
-                $this->channel->waitForBasicReturn();
-            } catch (\AMQPQueueException $e) {
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
-            }
+            usleep(1000);
         }
 
         $this->channel->close();
+
         try {
-            $this->connection->close();
+            $this->connection->disconnect();
         } catch (Exception $e) {
             throw new \MaxSky\AMQP\Exception\AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
         }
@@ -126,6 +124,7 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
                 $queue->setName($queue_name);
                 $queue->setFlags(AMQP_DURABLE);
                 $queue->declare();
+                $queue->bind($this->exchange_name);
             }
         } catch (AMQPException $e) {
             $this->connection->disconnect();
