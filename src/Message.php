@@ -56,7 +56,7 @@ class Message {
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
-    public static function init(?AMQPConfig $config): Message {
+    public static function init(?AMQPConfig $config = null): Message {
         if (!self::$instance) {
             self::$instance = new self($config);
         }
