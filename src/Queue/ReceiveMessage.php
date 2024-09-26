@@ -123,11 +123,24 @@ class ReceiveMessage extends AbstractReceiveMessage {
         }
 
         foreach ($this->options['queues'] as $queue_name) {
+            $args = [];
+
             if ($retry) {
                 $queue_name .= '.retry';
+            } else {
+                $args['x-dead-letter-exchange'] = "$this->exchange_name.retry";
+
+                if ($this->config->queue_ttl) {
+                    $args['x-message-ttl'] = $this->config->queue_ttl;
+                }
+
+                $args = new AMQPTable($args);
             }
 
-            $this->channel->queue_declare($queue_name, false, true, false, false);
+            $this->channel->queue_declare(
+                $queue_name, false, true, false, false, $args
+            );
+
             $this->channel->queue_bind($queue_name, $this->exchange_name);
         }
     }

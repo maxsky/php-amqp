@@ -119,6 +119,16 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
 
                 if ($retry) {
                     $queue_name .= '.retry';
+                } else {
+                    $args = [
+                        'x-dead-letter-exchange' => "$this->exchange_name.retry"
+                    ];
+
+                    if ($this->config->queue_ttl) {
+                        $args['x-message-ttl'] = $this->config->queue_ttl;
+                    }
+
+                    $queue->setArguments($args);
                 }
 
                 $queue->setName($queue_name);
