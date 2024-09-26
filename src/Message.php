@@ -10,6 +10,7 @@
 namespace MaxSky\AMQP;
 
 use AMQPConnection;
+use DateTime;
 use MaxSky\AMQP\Config\AMQPBaseConnection;
 use MaxSky\AMQP\Config\AMQPConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
@@ -62,6 +63,17 @@ class Message {
         }
 
         return self::$instance;
+    }
+
+    /**
+     * @param DateTime|int $msec
+     *
+     * @return Message
+     */
+    public function delay($msec): Message {
+        $this->messageService->delay($msec);
+
+        return $this;
     }
 
     /**

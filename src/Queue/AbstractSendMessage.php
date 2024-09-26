@@ -90,8 +90,8 @@ abstract class AbstractSendMessage {
      * @return AbstractSendMessage
      */
     public function delay($msec): AbstractSendMessage {
-        if ($msec instanceof DateTimeInterface) {
-            $msec = Carbon::now()->diffInMicroseconds($msec, false);
+        if (is_string($msec) || ($msec instanceof DateTimeInterface)) {
+            $msec = Carbon::now()->diffInMicroseconds($msec);
         }
 
         $msec = (int)$msec;
