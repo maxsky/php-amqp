@@ -15,7 +15,7 @@ use AMQPQueue;
 use Carbon\Carbon;
 use DateTimeInterface;
 use Exception;
-use MaxSky\AMQP\Config\AMQPConfig;
+use MaxSky\AMQP\Config\AMQPBaseConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
 use MaxSky\AMQP\Handler\MessageHandlerInterface;
@@ -27,7 +27,7 @@ abstract class AbstractSendMessage {
     /** @var AbstractConnection|AMQPConnection */
     protected $connection;
 
-    /** @var AMQPConfig */
+    /** @var AMQPBaseConfig */
     protected $config;
 
     /** @var \AMQPChannel|AMQPChannel */
@@ -46,12 +46,12 @@ abstract class AbstractSendMessage {
 
     /**
      * @param AbstractConnection|AMQPConnection $connection
-     * @param AMQPConfig                        $config
+     * @param AMQPBaseConfig                    $config
      *
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
-    public function __construct($connection, AMQPConfig $config) {
+    public function __construct($connection, AMQPBaseConfig $config) {
         $this->connection = $connection;
         $this->config = $config;
 

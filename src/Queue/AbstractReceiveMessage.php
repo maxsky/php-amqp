@@ -13,7 +13,7 @@ use AMQPConnection;
 use AMQPExchange;
 use Exception;
 use MaxSky\AMQP\Config\AMQPBaseConnection;
-use MaxSky\AMQP\Config\AMQPConfig;
+use MaxSky\AMQP\Config\AMQPBaseConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPMessageHandlerException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
@@ -26,7 +26,7 @@ abstract class AbstractReceiveMessage {
     /** @var AMQPConnection|AbstractConnection */
     protected $connection;
 
-    /** @var AMQPConfig */
+    /** @var AMQPBaseConfig */
     protected $config;
 
     /** @var array */
@@ -45,13 +45,13 @@ abstract class AbstractReceiveMessage {
     protected $queues = [];
 
     /**
-     * @param AMQPConfig $config
-     * @param array      $options
+     * @param AMQPBaseConfig $config
+     * @param array          $options
      *
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
-    public function __construct(AMQPConfig $config, array $options) {
+    public function __construct(AMQPBaseConfig $config, array $options) {
         $this->config = $config;
         $this->options = $options;
 

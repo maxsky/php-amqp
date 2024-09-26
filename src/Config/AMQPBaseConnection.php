@@ -21,11 +21,11 @@ class AMQPBaseConnection {
     private $connection = null;
 
     /**
-     * @param AMQPConfig $config
+     * @param AMQPBaseConfig $config
      *
      * @throws AMQPConnectionException
      */
-    public function __construct(AMQPConfig $config) {
+    public function __construct(AMQPBaseConfig $config) {
         if (extension_loaded('amqp')) {
             $this->createConnectionByExt($config);
         } else {
@@ -46,11 +46,11 @@ class AMQPBaseConnection {
     }
 
     /**
-     * @param AMQPConfig $config
+     * @param AMQPBaseConfig $config
      *
      * @return void
      */
-    private function createConnectionByExt(AMQPConfig $config) {
+    private function createConnectionByExt(AMQPBaseConfig $config) {
         $this->connection = (new AMQPConnection(array_merge([
             'host' => $config->host,
             'port' => $config->port,
@@ -62,12 +62,12 @@ class AMQPBaseConnection {
     }
 
     /**
-     * @param AMQPConfig $config
+     * @param AMQPBaseConfig $config
      *
      * @return void
      * @throws AMQPConnectionException
      */
-    private function createConnectionByLib(AMQPConfig $config) {
+    private function createConnectionByLib(AMQPBaseConfig $config) {
         $connectionConfig = new AMQPConnectionConfig();
 
         $connectionConfig->setHost($config->host);

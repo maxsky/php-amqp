@@ -44,18 +44,7 @@ class AMQPReceiveLaravelCommand extends Command {
      * @throws Exception
      */
     public function handle(): void {
-        $this->config = new AMQPConfig();
-
-        $this->config->connection_name = config('amqp.connection.name');
-        $this->config->host = config('amqp.connection.host');
-        $this->config->port = config('amqp.connection.port');
-        $this->config->user = config('amqp.connection.user');
-        $this->config->password = config('amqp.connection.password');
-        $this->config->vhost = config('amqp.connection.vhost');
-
-        $this->config->queue_ttl = config('amqp.arguments.queue_ttl');
-
-        $this->config->connect_options = config('amqp.connection.options');
+        $this->config = (new AMQPConfig)->getConfig();
 
         $this->initCommandOptions();
 

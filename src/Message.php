@@ -32,27 +32,31 @@ class Message {
     private $messageService;
 
     /**
-     * @param AMQPConfig $config
+     * @param AMQPConfig|null $config
      *
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
-    public function __construct(AMQPConfig $config) {
-        $this->config = $config;
+    public function __construct(?AMQPConfig $config = null) {
+        if (!$config) {
+            $config = new AMQPConfig();
+        }
 
-        $this->connection = (new AMQPBaseConnection($config))->getConnection();
+        $this->config = $config->getConfig();
+
+        $this->connection = (new AMQPBaseConnection($this->config))->getConnection();
 
         $this->initService();
     }
 
     /**
-     * @param AMQPConfig $config
+     * @param AMQPConfig|null $config
      *
      * @return Message
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
-    public static function init(AMQPConfig $config): Message {
+    public static function init(?AMQPConfig $config): Message {
         if (!self::$instance) {
             self::$instance = new self($config);
         }

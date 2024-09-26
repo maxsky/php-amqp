@@ -11,20 +11,20 @@ namespace Tests\Connection;
 
 use AMQPConnection;
 use MaxSky\AMQP\Config\AMQPBaseConnection;
-use MaxSky\AMQP\Config\AMQPConfig;
+use MaxSky\AMQP\Config\AMQPBaseConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use PhpAmqpLib\Connection\AbstractConnection;
 use Tests\TestCase;
 
 class TestConnectServer extends TestCase {
 
-    /** @var AMQPConfig */
+    /** @var AMQPBaseConfig */
     private $config;
 
     protected function setUp(): void {
         parent::setUp();
 
-        $this->config = new AMQPConfig();
+        $this->config = new AMQPBaseConfig();
 
         $this->config->connection_name = 'phpunit-test';
 
