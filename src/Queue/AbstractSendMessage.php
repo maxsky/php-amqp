@@ -85,22 +85,22 @@ abstract class AbstractSendMessage {
     abstract protected function prepare();
 
     /**
-     * @param int|string|DateTimeInterface $msec
+     * @param int|string|DateTimeInterface $time
      *
      * @return AbstractSendMessage
      */
-    public function delay($msec): AbstractSendMessage {
-        if (is_string($msec) || ($msec instanceof DateTimeInterface)) {
-            $msec = Carbon::now()->diffInMicroseconds($msec);
+    public function delay($time): AbstractSendMessage {
+        if (is_string($time) || ($time instanceof DateTimeInterface)) {
+            $time = Carbon::now()->diffInMicroseconds($time);
         }
 
-        $msec = (int)$msec;
+        $time = (int)$time;
 
-        if ($msec < 0) {
-            $msec = 0;
+        if ($time < 0) {
+            $time = 0;
         }
 
-        $this->delay_msec = $msec;
+        $this->delay_msec = $time;
 
         return $this;
     }

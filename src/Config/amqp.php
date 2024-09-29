@@ -2,7 +2,7 @@
 
 return [
     'connection' => [
-        'name' => config('app.name'),
+        'name' => env('APP_NAME', 'AMQP-ForRabbitMQ'),
         'host' => env('AMQP_HOST', '127.0.0.1'),
         'port' => (int)env('AMQP_PORT', 5672),
         'user' => env('AMQP_USER', 'guest'),
