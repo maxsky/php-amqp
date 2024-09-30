@@ -108,10 +108,6 @@ class ReceiveMessage extends AbstractReceiveMessage {
                 ])
             );
         } else {
-            if ($retry) {
-                $this->exchange_name .= '.retry';
-            }
-
             // declare normal exchange
             $this->channel->exchange_declare(
                 $this->exchange_name,
@@ -120,6 +116,19 @@ class ReceiveMessage extends AbstractReceiveMessage {
                 true,
                 false
             );
+
+            if ($retry) {
+                $this->exchange_name .= '.retry';
+
+                // declare retry exchange
+                $this->channel->exchange_declare(
+                    $this->exchange_name,
+                    AMQPExchangeType::TOPIC,
+                    false,
+                    true,
+                    false
+                );
+            }
         }
 
         foreach ($this->options['queues'] as $queue_name) {
@@ -127,7 +136,7 @@ class ReceiveMessage extends AbstractReceiveMessage {
 
             if ($retry) {
                 $queue_name .= '.retry';
-            } else {
+
                 $args['x-dead-letter-exchange'] = "$this->exchange_name.retry";
 
                 if ($this->config->queue_ttl) {

@@ -99,6 +99,12 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
 
             $this->exchange_name = $this->config->connection_name;
 
+            $exchange = new AMQPExchange($this->channel);
+            $exchange->setFlags(AMQP_DURABLE);
+            $exchange->setType(AMQPExchangeType::TOPIC);
+            $exchange->setName($this->exchange_name);
+            $exchange->declare();
+
             $retry = $this->options['type'] === 'retry';
 
             if ($retry) {
@@ -120,7 +126,7 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
 
                 if ($retry) {
                     $queue_name .= '.retry';
-                } else {
+
                     $args = [
                         'x-dead-letter-exchange' => "$this->exchange_name.retry"
                     ];
