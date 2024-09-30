@@ -147,7 +147,7 @@ class ReceiveMessage extends AbstractReceiveMessage {
             }
 
             $this->channel->queue_declare(
-                $queue_name, false, true, false, false, $args
+                $queue_name, false, true, false, false, false, $args
             );
 
             $this->channel->queue_bind($queue_name, $this->exchange_name);
