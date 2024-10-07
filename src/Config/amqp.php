@@ -13,6 +13,6 @@ return [
         ]
     ],
     'arguments' => [
-        'queue_ttl' => (int)env('AMQP_QUEUE_TTL', 5000)
+        'queue_ttl' => (int)env('AMQP_QUEUE_TTL', 0)
     ]
 ];

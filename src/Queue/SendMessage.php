@@ -39,6 +39,8 @@ class SendMessage extends AbstractSendMessage {
             "$queue_name.retry", false, true, false, false
         );
 
+        $this->channel->queue_bind("$queue_name.retry", "$this->exchange_name.retry");
+
         $args = [
             'x-dead-letter-exchange' => "$this->exchange_name.retry"
         ];
@@ -51,7 +53,6 @@ class SendMessage extends AbstractSendMessage {
             $queue_name, false, true, false, false, false, new AMQPTable($args)
         );
 
-        $this->channel->queue_bind("$queue_name.retry", "$this->exchange_name.retry");
         $this->channel->queue_bind($queue_name, $this->exchange_name);
 
         $message = $this->getAMQPMessage($handler, $data, $this->delay_msec);
@@ -69,6 +70,10 @@ class SendMessage extends AbstractSendMessage {
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
             }
         } else {
+            if ($this->delay_msec) {
+                $this->exchange_name .= '.delay';
+            }
+
             try {
                 $this->channel->basic_publish($message, $this->exchange_name);
             } catch (AMQPRuntimeException $e) {
@@ -85,15 +90,11 @@ class SendMessage extends AbstractSendMessage {
     }
 
     protected function prepare() {
-        $this->channel = $this->connection->channel();
-
         $this->exchange_name = $this->config->connection_name;
 
         if ($this->delay_msec) {
-            $this->exchange_name .= '.delay';
-
             // declare normal delay exchange
-            $this->channel->exchange_declare($this->exchange_name, AMQPExchangeType::DELAYED,
+            $this->channel->exchange_declare("$this->exchange_name.delay", AMQPExchangeType::DELAYED,
                 false, true, false, false, false, new AMQPTable([
                     'x-delayed-type' => AMQPExchangeType::TOPIC
                 ])

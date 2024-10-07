@@ -32,7 +32,7 @@ class ReceiveMessage extends AbstractReceiveMessage {
                 $queue_name,
                 '',
                 false,
-                true,
+                false,
                 false,
                 false,
                 function (AMQPMessage $msg) use ($queue_name) {
@@ -90,45 +90,44 @@ class ReceiveMessage extends AbstractReceiveMessage {
 
     protected function prepare() {
         $this->exchange_name = $this->config->connection_name;
+        $exchangeName = $this->exchange_name;
 
         $retry = $this->options['type'] === 'retry';
 
-        if ($this->options['delay']) {
-            // declare normal delay exchange
+        // declare normal exchange
+        $this->channel->exchange_declare(
+            $this->exchange_name,
+            AMQPExchangeType::TOPIC,
+            false,
+            true,
+            false
+        );
+
+        // declare delay exchange
+        $this->channel->exchange_declare(
+            "$this->exchange_name.delay",
+            AMQPExchangeType::DELAYED,
+            false,
+            true,
+            false,
+            false,
+            false,
+            new AMQPTable([
+                'x-delayed-type' => AMQPExchangeType::TOPIC
+            ])
+        );
+
+        if ($retry) {
+            $exchangeName .= '.retry';
+
+            // declare retry exchange
             $this->channel->exchange_declare(
-                "$this->exchange_name.delay",
-                AMQPExchangeType::DELAYED,
-                false,
-                true,
-                false,
-                false,
-                false,
-                new AMQPTable([
-                    'x-delayed-type' => AMQPExchangeType::TOPIC
-                ])
-            );
-        } else {
-            // declare normal exchange
-            $this->channel->exchange_declare(
-                $this->exchange_name,
+                $exchangeName,
                 AMQPExchangeType::TOPIC,
                 false,
                 true,
                 false
             );
-
-            if ($retry) {
-                $this->exchange_name .= '.retry';
-
-                // declare retry exchange
-                $this->channel->exchange_declare(
-                    $this->exchange_name,
-                    AMQPExchangeType::TOPIC,
-                    false,
-                    true,
-                    false
-                );
-            }
         }
 
         foreach ($this->options['queues'] as $queue_name) {
@@ -137,20 +136,20 @@ class ReceiveMessage extends AbstractReceiveMessage {
             if ($retry) {
                 $queue_name .= '.retry';
 
-                $args['x-dead-letter-exchange'] = "$this->exchange_name.retry";
-
                 if ($this->config->queue_ttl) {
                     $args['x-message-ttl'] = $this->config->queue_ttl;
                 }
-
-                $args = new AMQPTable($args);
+            } else {
+                $args['x-dead-letter-exchange'] = "$this->exchange_name.retry";
             }
+
+            $args = new AMQPTable($args);
 
             $this->channel->queue_declare(
                 $queue_name, false, true, false, false, false, $args
             );
 
-            $this->channel->queue_bind($queue_name, $this->exchange_name);
+            $this->channel->queue_bind($queue_name, $exchangeName);
         }
     }
 }

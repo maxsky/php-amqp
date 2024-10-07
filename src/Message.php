@@ -29,8 +29,10 @@ class Message {
     /** @var AMQPConnection|AbstractConnection */
     private $connection;
 
-    /** @var AbstractSendMessage */
-    private $messageService;
+    private $delay_time;
+
+    /** @var AbstractSendMessage|null */
+    private $messageService = null;
 
     /**
      * @param AMQPConfig|null $config
@@ -46,8 +48,6 @@ class Message {
         $this->config = $config->getConfig();
 
         $this->connection = (new AMQPBaseConnection($this->config))->getConnection();
-
-        $this->initService();
     }
 
     /**
@@ -71,7 +71,7 @@ class Message {
      * @return Message
      */
     public function delay($time): Message {
-        $this->messageService->delay($time);
+        $this->delay_time = $time;
 
         return $this;
     }
@@ -83,21 +83,19 @@ class Message {
      * @param bool        $transaction
      *
      * @return void
-     */
-    public function send(string $handler, $data, ?string $queue_name = 'default', bool $transaction = false) {
-        $this->messageService->send($handler, $data, $queue_name, $transaction);
-    }
-
-    /**
-     * @return void
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
+     * @throws \AMQPConnectionException
      */
-    private function initService() {
-        if (extension_loaded('amqp')) {
-            $this->messageService = new SendMessageByExtension($this->connection, $this->config);
-        } else {
-            $this->messageService = new SendMessage($this->connection, $this->config);
+    public function send(string $handler, $data, ?string $queue_name = 'default', bool $transaction = false) {
+        if (!$this->messageService) {
+            if (extension_loaded('amqp')) {
+                $this->messageService = new SendMessageByExtension($this->connection, $this->config, $this->delay_time);
+            } else {
+                $this->messageService = new SendMessage($this->connection, $this->config, $this->delay_time);
+            }
         }
+
+        $this->messageService->send($handler, $data, $queue_name, $transaction);
     }
 }

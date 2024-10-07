@@ -9,7 +9,6 @@
 
 namespace MaxSky\AMQP\Queue;
 
-use AMQPChannel;
 use AMQPException;
 use AMQPExchange;
 use AMQPQueue;
@@ -39,7 +38,12 @@ class SendMessageByExtension extends AbstractSendMessage {
 
             $this->queue->setName($queue_name);
             $this->queue->declare();
-            $this->queue->bind($this->exchange_name);
+
+            if ($this->delay_msec) {
+                $this->queue->bind("$this->exchange_name.delay");
+            } else {
+                $this->queue->bind($this->exchange_name);
+            }
         } catch (AMQPException $e) {
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
         }
@@ -81,32 +85,29 @@ class SendMessageByExtension extends AbstractSendMessage {
      * @throws \AMQPConnectionException
      */
     protected function prepare() {
-        try {
-            // Create and declare channel
-            $this->channel = new AMQPChannel($this->connection);
+        $this->exchange_name = $this->config->connection_name;
 
-            // AMQPC Exchange is the publishing mechanism
+        try {
+            $retryExchange = new AMQPExchange($this->channel);
+            $retryExchange->setName("$this->exchange_name.retry");
+            $retryExchange->setType(AMQPExchangeType::TOPIC);
+            $retryExchange->setFlags(AMQP_DURABLE);
+            $retryExchange->declare();
+
             $this->exchange = new AMQPExchange($this->channel);
             $this->exchange->setFlags(AMQP_DURABLE);
 
-            $this->exchange_name = $this->config->connection_name;
-
             if ($this->delay_msec) {
-                $this->exchange_name .= '.delay';
+                $this->exchange->setName("$this->exchange_name.delay");
 
                 $this->exchange->setType(AMQPExchangeType::DELAYED);
                 $this->exchange->setArgument('x-delayed-type', AMQPExchangeType::TOPIC);
             } else {
+                $this->exchange->setName($this->exchange_name);
                 $this->exchange->setType(AMQPExchangeType::TOPIC);
             }
 
-            $this->exchange->setName($this->exchange_name);
             $this->exchange->declare();
-
-            $retryExchange = new AMQPExchange($this->channel);
-            $retryExchange->setName("$this->exchange_name.retry");
-            $retryExchange->setType(AMQPExchangeType::TOPIC);
-            $retryExchange->declare();
 
             $this->retryQueue = new AMQPQueue($this->channel);
             $this->retryQueue->setFlags(AMQP_DURABLE);
@@ -114,15 +115,11 @@ class SendMessageByExtension extends AbstractSendMessage {
             $this->queue = new AMQPQueue($this->channel);
             $this->queue->setFlags(AMQP_DURABLE);
 
-            $args = [
-                'x-dead-letter-exchange' => "$this->exchange_name.retry"
-            ];
-
             if ($this->config->queue_ttl) {
-                $args['x-message-ttl'] = $this->config->queue_ttl;
+                $this->retryQueue->setArgument('x-message-ttl', $this->config->queue_ttl);
             }
 
-            $this->queue->setArguments($args);
+            $this->queue->setArgument('x-dead-letter-exchange', "$this->exchange_name.retry");
         } catch (AMQPException $e) {
             $this->connection->disconnect();
 
@@ -144,7 +141,7 @@ class SendMessageByExtension extends AbstractSendMessage {
     }
 
     /**
-     * @param int   $delay
+     * @param int   $delay 延迟毫秒
      * @param array $extra_headers
      *
      * @return array

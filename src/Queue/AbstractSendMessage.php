@@ -47,22 +47,28 @@ abstract class AbstractSendMessage {
     /**
      * @param AbstractConnection|AMQPConnection $connection
      * @param AMQPBaseConfig                    $config
+     * @param int|string|DateTimeInterface      $delay_time
      *
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
-    public function __construct($connection, AMQPBaseConfig $config) {
+    public function __construct($connection, AMQPBaseConfig $config, $delay_time = 0) {
         $this->connection = $connection;
         $this->config = $config;
 
         try {
             if ($this->connection instanceof AMQPConnection) {
-                $connection->connect();
+                $this->connection->connect();
+
+                $this->channel = new \AMQPChannel($this->connection);
+            } else {
+                $this->channel = $this->connection->channel();
             }
         } catch (Exception $e) {
             throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
         }
 
+        $this->delay($delay_time);
         $this->prepare();
     }
 

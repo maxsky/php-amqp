@@ -60,6 +60,8 @@ abstract class AbstractReceiveMessage {
         try {
             if ($this->connection instanceof AMQPConnection) {
                 $this->connection->connect();
+
+                $this->channel = new \AMQPChannel($this->connection);
             } else {
                 $this->channel = $this->connection->channel();
             }

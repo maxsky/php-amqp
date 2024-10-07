@@ -24,7 +24,6 @@ class AMQPReceiveLaravelCommand extends Command {
 
     protected $name = 'amqp';
     protected $signature = 'amqp:receive
-                            {--d|delay        : Use this option to receive delayed messages, default receive instant messages}
                             {--queues=default : Set the queue name, multiple queues are separated by ","}
                             {--type=normal    : Set queue type, optional retry}
                             {--ttl=60         : Set a number of seconds for child process can run, change this option may delete exist queue}
@@ -35,6 +34,7 @@ class AMQPReceiveLaravelCommand extends Command {
 
     private $config;
 
+    /** @var ReceiveMessage|ReceiveMessageByExtension */
     private $messageService;
 
     /**
@@ -73,12 +73,6 @@ class AMQPReceiveLaravelCommand extends Command {
 
         if (!in_array($this->options['type'], ['normal', 'retry'])) {
             exit('Queue type invalid.');
-        }
-
-        $this->options['delay'] = (bool)$this->option('delay');
-
-        if ($this->options['delay'] && ($this->options['type'] === 'retry')) {
-            exit('Queue retry type and delay can not be used together.');
         }
 
         $queues = array_filter(explode(',', $this->option('queues')));

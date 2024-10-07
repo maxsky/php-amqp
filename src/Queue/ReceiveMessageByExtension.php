@@ -9,7 +9,6 @@
 
 namespace MaxSky\AMQP\Queue;
 
-use AMQPChannel;
 use AMQPConnectionException;
 use AMQPEnvelope;
 use AMQPException;
@@ -91,57 +90,59 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
      * @throws AMQPQueueException
      */
     protected function prepare() {
+        $this->exchange_name = $this->config->connection_name;
+        $exchangeName = $this->exchange_name;
+
         try {
-            $this->channel = new AMQPChannel($this->connection);
-
+            // declare normal exchange
             $this->exchange = new AMQPExchange($this->channel);
+            $this->exchange->setName($this->exchange_name);
+            $this->exchange->setType(AMQPExchangeType::TOPIC);
             $this->exchange->setFlags(AMQP_DURABLE);
+            $this->exchange->declare();
 
-            $this->exchange_name = $this->config->connection_name;
-
-            $exchange = new AMQPExchange($this->channel);
-            $exchange->setFlags(AMQP_DURABLE);
-            $exchange->setType(AMQPExchangeType::TOPIC);
-            $exchange->setName($this->exchange_name);
-            $exchange->declare();
+            // declare delay exchange
+            $delayExchange = new AMQPExchange($this->channel);
+            $delayExchange->setName("$this->exchange_name.delay");
+            $delayExchange->setType(AMQPExchangeType::DELAYED);
+            $delayExchange->setFlags(AMQP_DURABLE);
+            $delayExchange->setArgument('x-delayed-type', AMQPExchangeType::TOPIC);
+            $delayExchange->declare();
 
             $retry = $this->options['type'] === 'retry';
 
             if ($retry) {
-                $this->exchange_name .= '.retry';
-            } else if ($this->options['delay']) {
-                $this->exchange_name .= '.delay';
+                $exchangeName .= '.retry';
 
-                $this->exchange->setType(AMQPExchangeType::DELAYED);
-                $this->exchange->setArgument('x-delayed-type', AMQPExchangeType::TOPIC);
-            } else {
-                $this->exchange->setType(AMQPExchangeType::TOPIC);
+                // declare retry exchange
+                $exchange = new AMQPExchange($this->channel);
+                $exchange->setName($exchangeName);
+                $exchange->setType(AMQPExchangeType::TOPIC);
+                $exchange->setFlags(AMQP_DURABLE);
+                $exchange->declare();
             }
-
-            $this->exchange->setName($this->exchange_name);
-            $this->exchange->declare();
 
             foreach ($this->options['queues'] as $queue_name) {
                 $queue = new AMQPQueue($this->channel);
 
+                $queue->setFlags(AMQP_DURABLE);
+
+                $args = [];
+
                 if ($retry) {
                     $queue_name .= '.retry';
-
-                    $args = [
-                        'x-dead-letter-exchange' => "$this->exchange_name.retry"
-                    ];
 
                     if ($this->config->queue_ttl) {
                         $args['x-message-ttl'] = $this->config->queue_ttl;
                     }
-
-                    $queue->setArguments($args);
+                } else {
+                    $args['x-dead-letter-exchange'] = "$this->exchange_name.retry";
                 }
 
                 $queue->setName($queue_name);
-                $queue->setFlags(AMQP_DURABLE);
+                $queue->setArguments($args);
                 $queue->declare();
-                $queue->bind($this->exchange_name);
+                $queue->bind($exchangeName);
 
                 $this->queues[] = $queue;
             }
