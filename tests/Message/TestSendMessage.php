@@ -43,6 +43,7 @@ class TestSendMessage extends TestCase {
      * @return void
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
+     * @throws \AMQPConnectionException
      */
     public function testSend() {
         Message::init($this->config)->send(ExampleMessageHandler::class, [
