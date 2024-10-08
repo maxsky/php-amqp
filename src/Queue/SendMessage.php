@@ -9,7 +9,6 @@
 
 namespace MaxSky\AMQP\Queue;
 
-use Exception;
 use MaxSky\AMQP\Config\AMQPExchangeType;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
@@ -35,25 +34,29 @@ class SendMessage extends AbstractSendMessage {
                          ?string $queue_name = 'default', bool $transaction = false) {
         $this->paramsFilter($handler, $data, $queue_name);
 
+        $args = null;
+
+        if ($this->config->queue_ttl) {
+            $args = [
+                'x-message-ttl' => $this->config->queue_ttl
+            ];
+        }
+
         $this->channel->queue_declare(
-            "$queue_name.retry", false, true, false, false
+            "$queue_name.retry", false, true, false, false, false, new AMQPTable($args)
         );
 
-        $this->channel->queue_bind("$queue_name.retry", "$this->exchange_name.retry");
+        $this->channel->queue_bind("$queue_name.retry", "$this->exchange_name.retry", "$queue_name.retry");
 
         $args = [
             'x-dead-letter-exchange' => "$this->exchange_name.retry"
         ];
 
-        if ($this->config->queue_ttl) {
-            $args['x-message-ttl'] = $this->config->queue_ttl;
-        }
-
         $this->channel->queue_declare(
             $queue_name, false, true, false, false, false, new AMQPTable($args)
         );
 
-        $this->channel->queue_bind($queue_name, $this->exchange_name);
+        $this->channel->queue_bind($queue_name, $this->exchange_name, $queue_name);
 
         $message = $this->getAMQPMessage($handler, $data, $this->delay_msec);
 
@@ -61,7 +64,7 @@ class SendMessage extends AbstractSendMessage {
             $this->channel->tx_select();
 
             try {
-                $this->channel->basic_publish($message, $this->exchange_name);
+                $this->channel->basic_publish($message, $this->exchange_name, $queue_name);
 
                 $this->channel->tx_commit();
             } catch (AMQPRuntimeException $e) {
@@ -75,17 +78,10 @@ class SendMessage extends AbstractSendMessage {
             }
 
             try {
-                $this->channel->basic_publish($message, $this->exchange_name);
+                $this->channel->basic_publish($message, $this->exchange_name, $queue_name);
             } catch (AMQPRuntimeException $e) {
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
             }
-        }
-
-        try {
-            $this->channel->close();
-            $this->connection->close();
-        } catch (Exception $e) {
-            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
         }
     }
 

@@ -17,6 +17,13 @@ use PhpAmqpLib\Connection\AMQPConnectionFactory;
 
 class AMQPBaseConnection {
 
+    const CONNECT_OPTION_CAST = [
+        'connect_timeout' => 'ConnectionTimeout',
+        'read_timeout' => 'ReadTimeout',
+        'write_timeout' => 'WriteTimeout',
+        'rpc_timeout' => 'ChannelRPCTimeout',
+    ];
+
     /** @var AbstractConnection|AMQPConnection */
     private $connection = null;
 
@@ -79,7 +86,11 @@ class AMQPBaseConnection {
         $connectionConfig->setConnectionName($config->connection_name);
 
         foreach ($config->connect_options as $key => $value) {
-            $method = 'set' . ucfirst($key);
+            if (array_key_exists($key, self::CONNECT_OPTION_CAST)) {
+                $method = 'set' . self::CONNECT_OPTION_CAST[$key];
+            } else {
+                $method = 'set' . ucfirst($key);
+            }
 
             if (!method_exists($connectionConfig, $method)) {
                 throw new AMQPConnectionException("Unsupported connection config: $key. Please check supported config from class PhpAmqpLib\Connection\AMQPConnectionConfig");

@@ -9,7 +9,10 @@ return [
         'password' => env('AMQP_PASSWORD', 'guest'),
         'vhost' => env('AMQP_VHOST', '/'),
         'options' => [
-
+            'connect_timeout' => 10.0,
+            'read_timeout' => 10.0,
+            'write_timeout' => 10.0,
+            'heartbeat' => 30
         ]
     ],
     'arguments' => [

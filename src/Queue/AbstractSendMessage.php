@@ -97,7 +97,7 @@ abstract class AbstractSendMessage {
      */
     public function delay($time): AbstractSendMessage {
         if (is_string($time) || ($time instanceof DateTimeInterface)) {
-            $time = Carbon::now()->diffInMicroseconds($time);
+            $time = Carbon::now()->diffInMilliseconds($time, false);
         }
 
         $time = (int)$time;

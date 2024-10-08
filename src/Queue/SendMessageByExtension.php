@@ -34,7 +34,7 @@ class SendMessageByExtension extends AbstractSendMessage {
         try {
             $this->retryQueue->setName("$queue_name.retry");
             $this->retryQueue->declare();
-            $this->retryQueue->bind("$this->exchange_name.retry");
+            $this->retryQueue->bind("$this->exchange_name.retry", "$queue_name.retry");
 
             $this->queue->setName($queue_name);
             $this->queue->declare();
@@ -42,7 +42,7 @@ class SendMessageByExtension extends AbstractSendMessage {
             if ($this->delay_msec) {
                 $this->queue->bind("$this->exchange_name.delay");
             } else {
-                $this->queue->bind($this->exchange_name);
+                $this->queue->bind($this->exchange_name, $queue_name);
             }
         } catch (AMQPException $e) {
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
@@ -55,28 +55,21 @@ class SendMessageByExtension extends AbstractSendMessage {
             try {
                 $this->channel->startTransaction();
 
-                $this->exchange->publish($message, null, null, $headers);
+                $this->exchange->publish($message, $queue_name, null, $headers);
 
                 $this->channel->commitTransaction();
             } catch (AMQPException $e) {
                 $channel->rollbackTransaction();
 
-                $this->connection->disconnect();
-
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
             }
         } else {
             try {
-                $this->exchange->publish($message, null, null, $headers);
+                $this->exchange->publish($message, $queue_name, null, $headers);
             } catch (AMQPException $e) {
-                $this->connection->disconnect();
-
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
             }
         }
-
-        $this->channel->close();
-        $this->connection->disconnect();
     }
 
     /**
@@ -121,6 +114,7 @@ class SendMessageByExtension extends AbstractSendMessage {
 
             $this->queue->setArgument('x-dead-letter-exchange', "$this->exchange_name.retry");
         } catch (AMQPException $e) {
+            $this->channel->close();
             $this->connection->disconnect();
 
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
