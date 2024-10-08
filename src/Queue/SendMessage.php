@@ -73,12 +73,10 @@ class SendMessage extends AbstractSendMessage {
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
             }
         } else {
-            if ($this->delay_msec) {
-                $this->exchange_name .= '.delay';
-            }
+            $exchangeName = $this->delay_msec ? "$this->exchange_name.delay" : $this->exchange_name;
 
             try {
-                $this->channel->basic_publish($message, $this->exchange_name, $queue_name);
+                $this->channel->basic_publish($message, $exchangeName, $queue_name);
             } catch (AMQPRuntimeException $e) {
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
             }
