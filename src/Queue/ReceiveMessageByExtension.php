@@ -68,7 +68,7 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
                 try {
                     $queue->consume($callback);
                 } catch (AMQPException $e) {
-                    throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+                    throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
                 }
             }
 
@@ -80,7 +80,7 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
         try {
             $this->connection->disconnect();
         } catch (Exception $e) {
-            throw new \MaxSky\AMQP\Exception\AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            throw new \MaxSky\AMQP\Exception\AMQPConnectionException($e->getMessage(), $e->getCode(), $e);
         }
     }
 
@@ -149,7 +149,7 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
         } catch (AMQPException $e) {
             $this->connection->disconnect();
 
-            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
         }
     }
 }

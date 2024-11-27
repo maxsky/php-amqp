@@ -66,7 +66,7 @@ abstract class AbstractSendMessage {
                 $this->channel = $this->connection->channel();
             }
         } catch (Exception $e) {
-            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e);
         }
 
         $this->delay($delay_time);

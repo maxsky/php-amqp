@@ -58,7 +58,7 @@ class SendMessage extends AbstractSendMessage {
 
             $this->channel->queue_bind($queue_name, $this->exchange_name, $queue_name);
         } catch (RuntimeException $e) {
-            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
         }
 
         $message = $this->getAMQPMessage($handler, $data, $this->delay_msec);
@@ -71,7 +71,7 @@ class SendMessage extends AbstractSendMessage {
             } catch (RuntimeException $e) {
                 $this->channel->tx_rollback();
 
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
             }
         } else {
             $exchangeName = $this->delay_msec ? "$this->exchange_name.delay" : $this->exchange_name;
@@ -79,7 +79,7 @@ class SendMessage extends AbstractSendMessage {
             try {
                 $this->channel->basic_publish($message, $exchangeName, $queue_name);
             } catch (RuntimeException $e) {
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
             }
         }
     }
@@ -110,7 +110,7 @@ class SendMessage extends AbstractSendMessage {
                 "$this->exchange_name.retry", AMQPExchangeType::TOPIC, false, true, false
             );
         } catch (RuntimeException $e) {
-            throw new AMQPRuntimeException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            throw new AMQPRuntimeException($e->getMessage(), $e->getCode(), $e);
         }
     }
 

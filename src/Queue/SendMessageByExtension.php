@@ -48,7 +48,7 @@ class SendMessageByExtension extends AbstractSendMessage {
                 $this->queue->bind($this->exchange_name, $queue_name);
             }
         } catch (AMQPException $e) {
-            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
         }
 
         $message = $this->getAMQPMessage($handler, $data);
@@ -64,13 +64,13 @@ class SendMessageByExtension extends AbstractSendMessage {
             } catch (AMQPException $e) {
                 $channel->rollbackTransaction();
 
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
             }
         } else {
             try {
                 $this->exchange->publish($message, $queue_name, null, $headers);
             } catch (AMQPException $e) {
-                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
             }
         }
     }
@@ -118,11 +118,11 @@ class SendMessageByExtension extends AbstractSendMessage {
 
             $this->queue->setArgument('x-dead-letter-exchange', "$this->exchange_name.retry");
         } catch (AMQPChannelException|AMQPExchangeException $e) {
-            throw new AMQPRuntimeException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            throw new AMQPRuntimeException($e->getMessage(), $e->getCode(), $e);
         } catch (\AMQPQueueException $e) {
-            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
         } catch (\AMQPConnectionException $e) {
-            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
+            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e);
         }
     }
 
