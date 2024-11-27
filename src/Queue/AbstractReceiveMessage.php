@@ -79,7 +79,6 @@ abstract class AbstractReceiveMessage {
 
     /**
      * @return void
-     * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
     abstract protected function prepare();

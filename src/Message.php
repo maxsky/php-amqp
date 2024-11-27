@@ -15,6 +15,7 @@ use MaxSky\AMQP\Config\AMQPBaseConnection;
 use MaxSky\AMQP\Config\AMQPConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
+use MaxSky\AMQP\Exception\AMQPRuntimeException;
 use MaxSky\AMQP\Queue\AbstractSendMessage;
 use MaxSky\AMQP\Queue\SendMessage;
 use MaxSky\AMQP\Queue\SendMessageByExtension;
@@ -38,7 +39,6 @@ class Message {
      * @param AMQPConfig|null $config
      *
      * @throws AMQPConnectionException
-     * @throws AMQPQueueException
      */
     public function __construct(?AMQPConfig $config = null) {
         if (!$config) {
@@ -55,7 +55,6 @@ class Message {
      *
      * @return Message
      * @throws AMQPConnectionException
-     * @throws AMQPQueueException
      */
     public static function init(?AMQPConfig $config = null): Message {
         if (!self::$instance) {
@@ -85,7 +84,7 @@ class Message {
      * @return void
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
-     * @throws \AMQPConnectionException
+     * @throws AMQPRuntimeException
      */
     public function send(string $handler, $data, ?string $queue_name = 'default', bool $transaction = false) {
         if (!$this->messageService) {

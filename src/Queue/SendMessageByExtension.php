@@ -9,11 +9,15 @@
 
 namespace MaxSky\AMQP\Queue;
 
+use AMQPChannelException;
 use AMQPException;
 use AMQPExchange;
+use AMQPExchangeException;
 use AMQPQueue;
 use MaxSky\AMQP\Config\AMQPExchangeType;
+use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
+use MaxSky\AMQP\Exception\AMQPRuntimeException;
 
 class SendMessageByExtension extends AbstractSendMessage {
 
@@ -25,7 +29,6 @@ class SendMessageByExtension extends AbstractSendMessage {
      *
      * @return void
      * @throws AMQPQueueException
-     * @throws \AMQPConnectionException
      */
     public function send(string  $handler, $data,
                          ?string $queue_name = 'default', bool $transaction = false) {
@@ -74,8 +77,9 @@ class SendMessageByExtension extends AbstractSendMessage {
 
     /**
      * @return void
+     * @throws AMQPConnectionException
      * @throws AMQPQueueException
-     * @throws \AMQPConnectionException
+     * @throws AMQPRuntimeException
      */
     protected function prepare() {
         $this->exchange_name = $this->config->connection_name;
@@ -113,11 +117,12 @@ class SendMessageByExtension extends AbstractSendMessage {
             }
 
             $this->queue->setArgument('x-dead-letter-exchange', "$this->exchange_name.retry");
-        } catch (AMQPException $e) {
-            $this->channel->close();
-            $this->connection->disconnect();
-
+        } catch (AMQPChannelException|AMQPExchangeException $e) {
+            throw new AMQPRuntimeException($e->getMessage(), $e->getCode(), $e->getPrevious());
+        } catch (\AMQPQueueException $e) {
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+        } catch (\AMQPConnectionException $e) {
+            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e->getPrevious());
         }
     }
 

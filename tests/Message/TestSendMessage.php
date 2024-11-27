@@ -13,6 +13,7 @@ use MaxSky\AMQP\Config\AMQPBaseConfig;
 use MaxSky\AMQP\Config\AMQPConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
+use MaxSky\AMQP\Exception\AMQPRuntimeException;
 use MaxSky\AMQP\Message;
 use Tests\TestCase;
 
@@ -43,7 +44,7 @@ class TestSendMessage extends TestCase {
      * @return void
      * @throws AMQPConnectionException
      * @throws AMQPQueueException
-     * @throws \AMQPConnectionException
+     * @throws AMQPRuntimeException
      */
     public function testSend() {
         Message::init($this->config)->send(ExampleMessageHandler::class, [

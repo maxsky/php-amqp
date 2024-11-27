@@ -10,11 +10,11 @@
 namespace MaxSky\AMQP\Queue;
 
 use MaxSky\AMQP\Config\AMQPExchangeType;
-use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
-use PhpAmqpLib\Exception\AMQPRuntimeException;
+use MaxSky\AMQP\Exception\AMQPRuntimeException;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Wire\AMQPTable;
+use RuntimeException;
 
 class SendMessage extends AbstractSendMessage {
 
@@ -27,7 +27,6 @@ class SendMessage extends AbstractSendMessage {
      * @param bool        $transaction 是否开启事务
      *
      * @return void
-     * @throws AMQPConnectionException
      * @throws AMQPQueueException
      */
     public function send(string  $handler, $data,
@@ -42,32 +41,34 @@ class SendMessage extends AbstractSendMessage {
             ];
         }
 
-        $this->channel->queue_declare(
-            "$queue_name.retry", false, true, false, false, false, new AMQPTable($args)
-        );
+        try {
+            $this->channel->queue_declare(
+                "$queue_name.retry", false, true, false, false, false, new AMQPTable($args)
+            );
 
-        $this->channel->queue_bind("$queue_name.retry", "$this->exchange_name.retry", "$queue_name.retry");
+            $this->channel->queue_bind("$queue_name.retry", "$this->exchange_name.retry", "$queue_name.retry");
 
-        $args = [
-            'x-dead-letter-exchange' => "$this->exchange_name.retry"
-        ];
+            $args = [
+                'x-dead-letter-exchange' => "$this->exchange_name.retry"
+            ];
 
-        $this->channel->queue_declare(
-            $queue_name, false, true, false, false, false, new AMQPTable($args)
-        );
+            $this->channel->queue_declare(
+                $queue_name, false, true, false, false, false, new AMQPTable($args)
+            );
 
-        $this->channel->queue_bind($queue_name, $this->exchange_name, $queue_name);
+            $this->channel->queue_bind($queue_name, $this->exchange_name, $queue_name);
+        } catch (RuntimeException $e) {
+            throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
+        }
 
         $message = $this->getAMQPMessage($handler, $data, $this->delay_msec);
 
         if ($transaction) {
-            $this->channel->tx_select();
-
             try {
+                $this->channel->tx_select();
                 $this->channel->basic_publish($message, $this->exchange_name, $queue_name);
-
                 $this->channel->tx_commit();
-            } catch (AMQPRuntimeException $e) {
+            } catch (RuntimeException $e) {
                 $this->channel->tx_rollback();
 
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
@@ -77,32 +78,40 @@ class SendMessage extends AbstractSendMessage {
 
             try {
                 $this->channel->basic_publish($message, $exchangeName, $queue_name);
-            } catch (AMQPRuntimeException $e) {
+            } catch (RuntimeException $e) {
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e->getPrevious());
             }
         }
     }
 
+    /**
+     * @return void
+     * @throws AMQPRuntimeException
+     */
     protected function prepare() {
         $this->exchange_name = $this->config->connection_name;
 
-        if ($this->delay_msec) {
-            // declare normal delay exchange
-            $this->channel->exchange_declare("$this->exchange_name.delay", AMQPExchangeType::DELAYED,
-                false, true, false, false, false, new AMQPTable([
-                    'x-delayed-type' => AMQPExchangeType::TOPIC
-                ])
-            );
-        } else {
-            // declare normal exchange
-            $this->channel->exchange_declare(
-                $this->exchange_name, AMQPExchangeType::TOPIC, false, true, false
-            );
-        }
+        try {
+            if ($this->delay_msec) {
+                // declare normal delay exchange
+                $this->channel->exchange_declare("$this->exchange_name.delay", AMQPExchangeType::DELAYED,
+                    false, true, false, false, false, new AMQPTable([
+                        'x-delayed-type' => AMQPExchangeType::TOPIC
+                    ])
+                );
+            } else {
+                // declare normal exchange
+                $this->channel->exchange_declare(
+                    $this->exchange_name, AMQPExchangeType::TOPIC, false, true, false
+                );
+            }
 
-        $this->channel->exchange_declare(
-            "$this->exchange_name.retry", AMQPExchangeType::TOPIC, false, true, false
-        );
+            $this->channel->exchange_declare(
+                "$this->exchange_name.retry", AMQPExchangeType::TOPIC, false, true, false
+            );
+        } catch (RuntimeException $e) {
+            throw new AMQPRuntimeException($e->getMessage(), $e->getCode(), $e->getPrevious());
+        }
     }
 
     /**

@@ -18,6 +18,7 @@ use Exception;
 use MaxSky\AMQP\Config\AMQPBaseConfig;
 use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
+use MaxSky\AMQP\Exception\AMQPRuntimeException;
 use MaxSky\AMQP\Handler\MessageHandlerInterface;
 use PhpAmqpLib\Channel\AMQPChannel;
 use PhpAmqpLib\Connection\AbstractConnection;
@@ -50,7 +51,7 @@ abstract class AbstractSendMessage {
      * @param int|string|DateTimeInterface      $delay_time
      *
      * @throws AMQPConnectionException
-     * @throws AMQPQueueException
+     * @throws AMQPRuntimeException
      */
     public function __construct($connection, AMQPBaseConfig $config, $delay_time = 0) {
         $this->connection = $connection;
@@ -85,8 +86,7 @@ abstract class AbstractSendMessage {
 
     /**
      * @return void
-     * @throws AMQPConnectionException
-     * @throws AMQPQueueException
+     * @throws AMQPRuntimeException
      */
     abstract protected function prepare();
 
