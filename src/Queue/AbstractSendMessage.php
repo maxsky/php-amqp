@@ -69,7 +69,10 @@ abstract class AbstractSendMessage {
             throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e);
         }
 
-        $this->delay($delay_time);
+        if ($delay_time) {
+            $this->delay($delay_time);
+        }
+
         $this->prepare();
     }
 

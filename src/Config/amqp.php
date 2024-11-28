@@ -10,9 +10,9 @@ return [
         'vhost' => env('AMQP_VHOST', '/'),
         'options' => [
             'connect_timeout' => 10.0,
-            'read_timeout' => 10.0,
+            'read_timeout' => 0.0,  // php-amqp extension please set to 0
             'write_timeout' => 10.0,
-            'heartbeat' => 30
+            'heartbeat' => 60
         ]
     ],
     'arguments' => [

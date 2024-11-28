@@ -42,11 +42,9 @@ class SendMessageByExtension extends AbstractSendMessage {
             $this->queue->setName($queue_name);
             $this->queue->declare();
 
-            if ($this->delay_msec) {
-                $this->queue->bind("$this->exchange_name.delay");
-            } else {
-                $this->queue->bind($this->exchange_name, $queue_name);
-            }
+            $exchangeName = $this->delay_msec ? "$this->exchange_name.delay" : $this->exchange_name;
+
+            $this->queue->bind($exchangeName, $queue_name);
         } catch (AMQPException $e) {
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
         }

@@ -9,13 +9,13 @@
 
 namespace MaxSky\AMQP\Queue;
 
-use AMQPConnectionException;
 use AMQPEnvelope;
 use AMQPException;
 use AMQPExchange;
 use AMQPQueue;
 use Exception;
 use MaxSky\AMQP\Config\AMQPExchangeType;
+use MaxSky\AMQP\Exception\AMQPConnectionException;
 use MaxSky\AMQP\Exception\AMQPQueueException;
 
 class ReceiveMessageByExtension extends AbstractReceiveMessage {
@@ -23,7 +23,7 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
     /**
      * @return void
      * @throws AMQPQueueException
-     * @throws \MaxSky\AMQP\Exception\AMQPConnectionException
+     * @throws AMQPConnectionException
      */
     public function receive() {
         $callback = function (AMQPEnvelope $msg, AMQPQueue $queue) {
@@ -62,17 +62,13 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
             $queue->ack($msg->getDeliveryTag());
         };
 
-        while ($this->channel->isConnected()) {
-            /** @var AMQPQueue $queue */
-            foreach ($this->queues as $queue) {
-                try {
-                    $queue->consume($callback);
-                } catch (AMQPException $e) {
-                    throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
-                }
+        /** @var AMQPQueue $queue */
+        foreach ($this->queues as $queue) {
+            try {
+                $queue->consume($callback);
+            } catch (AMQPException $e) {
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
             }
-
-            usleep(1000);
         }
 
         $this->channel->close();
@@ -80,7 +76,7 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
         try {
             $this->connection->disconnect();
         } catch (Exception $e) {
-            throw new \MaxSky\AMQP\Exception\AMQPConnectionException($e->getMessage(), $e->getCode(), $e);
+            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e);
         }
     }
 
@@ -147,7 +143,11 @@ class ReceiveMessageByExtension extends AbstractReceiveMessage {
                 $this->queues[] = $queue;
             }
         } catch (AMQPException $e) {
-            $this->connection->disconnect();
+            try {
+                $this->connection->disconnect();
+            } catch (\AMQPConnectionException $e) {
+                throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e);
+            }
 
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
         }

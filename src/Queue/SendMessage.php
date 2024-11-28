@@ -56,7 +56,9 @@ class SendMessage extends AbstractSendMessage {
                 $queue_name, false, true, false, false, false, new AMQPTable($args)
             );
 
-            $this->channel->queue_bind($queue_name, $this->exchange_name, $queue_name);
+            $exchangeName = $this->delay_msec ? "$this->exchange_name.delay" : $this->exchange_name;
+
+            $this->channel->queue_bind($queue_name, $exchangeName, $queue_name);
         } catch (RuntimeException $e) {
             throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
         }
@@ -66,7 +68,7 @@ class SendMessage extends AbstractSendMessage {
         if ($transaction) {
             try {
                 $this->channel->tx_select();
-                $this->channel->basic_publish($message, $this->exchange_name, $queue_name);
+                $this->channel->basic_publish($message, $exchangeName, $queue_name);
                 $this->channel->tx_commit();
             } catch (RuntimeException $e) {
                 $this->channel->tx_rollback();
@@ -74,8 +76,6 @@ class SendMessage extends AbstractSendMessage {
                 throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
             }
         } else {
-            $exchangeName = $this->delay_msec ? "$this->exchange_name.delay" : $this->exchange_name;
-
             try {
                 $this->channel->basic_publish($message, $exchangeName, $queue_name);
             } catch (RuntimeException $e) {
@@ -93,7 +93,7 @@ class SendMessage extends AbstractSendMessage {
 
         try {
             if ($this->delay_msec) {
-                // declare normal delay exchange
+                // declare delay exchange
                 $this->channel->exchange_declare("$this->exchange_name.delay", AMQPExchangeType::DELAYED,
                     false, true, false, false, false, new AMQPTable([
                         'x-delayed-type' => AMQPExchangeType::TOPIC

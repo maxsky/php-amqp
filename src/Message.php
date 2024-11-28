@@ -30,7 +30,8 @@ class Message {
     /** @var AMQPConnection|AbstractConnection */
     private $connection;
 
-    private $delay_time;
+    /** @var int|string|DateTimeInterface|null */
+    private $delay_time = 0;
 
     /** @var AbstractSendMessage|null */
     private $messageService = null;

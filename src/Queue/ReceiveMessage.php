@@ -11,14 +11,18 @@ namespace MaxSky\AMQP\Queue;
 
 use Exception;
 use MaxSky\AMQP\Config\AMQPExchangeType;
+use MaxSky\AMQP\Exception\AMQPConnectionException;
+use MaxSky\AMQP\Exception\AMQPQueueException;
+use MaxSky\AMQP\Exception\AMQPRuntimeException;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Wire\AMQPTable;
+use RuntimeException;
 
 class ReceiveMessage extends AbstractReceiveMessage {
 
     /**
      * @return void
-     * @throws Exception
+     * @throws AMQPConnectionException
      */
     public function receive() {
         $retry = $this->options['type'] === 'retry';
@@ -84,50 +88,63 @@ class ReceiveMessage extends AbstractReceiveMessage {
             $this->channel->wait();
         }
 
-        $this->channel->close();
-        $this->connection->close();
+        try {
+            $this->channel->close();
+            $this->connection->close();
+        } catch (Exception $e) {
+            throw new AMQPConnectionException($e->getMessage(), $e->getCode(), $e);
+        }
     }
 
+    /**
+     * @return void
+     * @throws AMQPQueueException
+     * @throws AMQPRuntimeException
+     */
     protected function prepare() {
         $this->exchange_name = $this->config->connection_name;
         $exchangeName = $this->exchange_name;
 
         $retry = $this->options['type'] === 'retry';
 
-        // declare normal exchange
-        $this->channel->exchange_declare(
-            $this->exchange_name,
-            AMQPExchangeType::TOPIC,
-            false,
-            true,
-            false
-        );
-
-        // declare delay exchange
-        $this->channel->exchange_declare(
-            "$this->exchange_name.delay",
-            AMQPExchangeType::DELAYED,
-            false,
-            true,
-            false,
-            false,
-            false,
-            new AMQPTable([
-                'x-delayed-type' => AMQPExchangeType::TOPIC
-            ])
-        );
-
-        if ($retry) {
-            $exchangeName .= '.retry';
-
-            // declare retry exchange
+        try {
+            // declare normal exchange
             $this->channel->exchange_declare(
-                $exchangeName,
+                $this->exchange_name,
                 AMQPExchangeType::TOPIC,
                 false,
                 true,
                 false
             );
+
+            // declare delay exchange
+            $this->channel->exchange_declare(
+                "$this->exchange_name.delay",
+                AMQPExchangeType::DELAYED,
+                false,
+                true,
+                false,
+                false,
+                false,
+                new AMQPTable([
+                    'x-delayed-type' => AMQPExchangeType::TOPIC
+                ])
+            );
+
+            if ($retry) {
+                $exchangeName .= '.retry';
+
+                // declare retry exchange
+                $this->channel->exchange_declare(
+                    $exchangeName,
+                    AMQPExchangeType::TOPIC,
+                    false,
+                    true,
+                    false
+                );
+            }
+        } catch (RuntimeException $e) {
+            throw new AMQPRuntimeException($e->getMessage(), $e->getCode(), $e);
         }
 
         foreach ($this->options['queues'] as $queue_name) {
@@ -143,13 +160,17 @@ class ReceiveMessage extends AbstractReceiveMessage {
                 $args['x-dead-letter-exchange'] = "$this->exchange_name.retry";
             }
 
-            $args = new AMQPTable($args);
+            try {
+                $args = new AMQPTable($args);
 
-            $this->channel->queue_declare(
-                $queue_name, false, true, false, false, false, $args
-            );
+                $this->channel->queue_declare(
+                    $queue_name, false, true, false, false, false, $args
+                );
 
-            $this->channel->queue_bind($queue_name, $exchangeName);
+                $this->channel->queue_bind($queue_name, $exchangeName);
+            } catch (RuntimeException $e) {
+                throw new AMQPQueueException($e->getMessage(), $e->getCode(), $e);
+            }
         }
     }
 }
